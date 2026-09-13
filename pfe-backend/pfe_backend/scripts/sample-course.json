@@ -1,0 +1,19 @@
+{
+  "title": "cours z",
+  "pages": [
+    {
+      "id": "lesson-1",
+      "type": "lesson",
+      "title": "yo baba",
+      "blocks": [
+        {
+          "id": "block-1",
+          "type": "text",
+          "content": "start writng(ena katebha)"
+        }
+      ]
+    }
+  ],
+  "lessons": [],
+  "settings": { "scormVersion": "1.2" }
+}
