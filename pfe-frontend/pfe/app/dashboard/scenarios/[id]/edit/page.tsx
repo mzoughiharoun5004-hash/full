@@ -25,7 +25,7 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
   const { user } = useAuth()
   const viewMode = searchParams.get('mode') === 'view'
 
-  const { data: scenario, isLoading } = useQuery<Scenario>({
+  const { data: scenario, isLoading, isError, refetch } = useQuery<Scenario>({
     queryKey: ['scenario', id],
     queryFn: () => scenariosApi.getOne(id).then((response) => response.data),
   })
@@ -34,6 +34,24 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
     return (
       <div className="flex h-full items-center justify-center py-24">
         <Spinner />
+      </div>
+    )
+  }
+
+  if (isError || !scenario) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <h1 className="text-lg font-bold">Course could not be loaded</h1>
+        <p className="max-w-md text-sm text-[var(--lux-muted)]">
+          Check your connection and try again. No course changes have been started.
+        </p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="rounded-lg bg-[var(--lux-primary)] px-4 py-2 text-sm font-semibold text-white"
+        >
+          Retry
+        </button>
       </div>
     )
   }
@@ -64,6 +82,7 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
           mode="edit"
           scenarioId={id}
           scenario={scenario}
+          loadedDocument={scenario.courseDocument}
           readOnly={readOnly}
           viewOnlyMessage={
             approvedCollaboratorViewOnly

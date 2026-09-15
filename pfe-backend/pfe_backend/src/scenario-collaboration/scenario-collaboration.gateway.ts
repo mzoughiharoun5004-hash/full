@@ -12,7 +12,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
-import type { Server, Socket } from 'socket.io';
+import type { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { AuthService } from 'src/auth/auth.service';
 import { isApprovedScenarioStatut, StatutScenario } from 'src/common/enums';
 import { Scenario } from 'src/scenario/scenario.entity';
@@ -31,7 +31,12 @@ interface ScenarioSocketData {
   scenarioRooms?: Set<string>;
 }
 
-type ScenarioSocket = Socket & { data: ScenarioSocketData };
+type ScenarioSocket = Socket<
+  DefaultEventsMap,
+  DefaultEventsMap,
+  DefaultEventsMap,
+  ScenarioSocketData
+>;
 
 interface ScenarioPayload {
   scenarioId?: number | string;
@@ -184,7 +189,7 @@ export class ScenarioCollaborationGateway
         message: 'Your access to this scenario has been revoked.',
       });
 
-      await socket.leave(room);
+      socket.leave(room);
       data.scenarioRooms?.delete(scenarioId);
       this.removePresence(scenarioId, socket as unknown as ScenarioSocket);
       this.server.to(room).emit('scenario:presence', {
@@ -365,7 +370,8 @@ export class ScenarioCollaborationGateway
   }
 
   private extractToken(client: ScenarioSocket): string | null {
-    const authToken = client.handshake.auth?.token;
+    // socket.io types Handshake.auth as `{ [key: string]: any }`; narrow to unknown here.
+    const authToken = client.handshake.auth?.token as unknown;
     if (typeof authToken === 'string' && authToken.trim()) {
       return this.cleanToken(authToken);
     }

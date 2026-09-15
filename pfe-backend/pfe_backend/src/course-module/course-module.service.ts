@@ -8,6 +8,12 @@ import {
 } from './dto/course-module.dto';
 import { ReorderItemDto } from 'src/common/dto/reorder.dto';
 import { ScenarioService } from 'src/scenario/scenario.service';
+import { Quiz } from 'src/quiz/quiz.entity';
+
+interface ModuleLessonSummary {
+  quiz?: Quiz;
+  estimatedMinutes?: number;
+}
 
 @Injectable()
 export class CourseModuleService {
@@ -146,7 +152,7 @@ export class CourseModuleService {
     const modules = await this.findByScenario(scenarioId);
 
     // Get all lessons from sequences and activities
-    const allLessons: any[] = [];
+    const allLessons: ModuleLessonSummary[] = [];
     modules.forEach((module) => {
       module.sequences?.forEach((sequence) => {
         sequence.activites?.forEach((activity) => {

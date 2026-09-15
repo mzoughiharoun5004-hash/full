@@ -56,7 +56,7 @@ export class ActiviteService {
         relations: ['module', 'module.scenario'],
       });
       if (!sequence)
-        throw new NotFoundException(`SÃ©quence #${dto.sequenceId} introuvable`);
+        throw new NotFoundException(`Séquence #${dto.sequenceId} introuvable`);
       await this.scenarioService.assertCanEditScenario(
         sequence.module.scenario.id,
         requesterId,
@@ -122,7 +122,7 @@ export class ActiviteService {
         relations: ['module', 'module.scenario'],
       });
       if (!sequence)
-        throw new NotFoundException(`SÃ©quence #${sequenceId} introuvable`);
+        throw new NotFoundException(`Séquence #${sequenceId} introuvable`);
       await this.scenarioService.assertCanEditScenario(
         sequence.module.scenario.id,
         requesterId,

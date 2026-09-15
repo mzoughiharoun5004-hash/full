@@ -3,6 +3,9 @@ import Cookies from 'js-cookie'
 import { clearAuth, normalizeUser } from '@/lib/auth'
 import type {
   Activity,
+  AiChangeSet,
+  AiCourseBrief,
+  AiCourseOutline,
   ActivityType,
   CourseDocument,
   MediaAsset,
@@ -11,8 +14,6 @@ import type {
   QuestionType,
   Quiz,
   Scenario,
-  ScenarioActivityLog,
-  ScenarioChangeProposal,
   ScenarioComment,
   ScenarioDocument,
   ScenarioModule,
@@ -20,7 +21,6 @@ import type {
   ScenarioShare,
   ScenarioStatus,
   Sequence,
-  SharePermission,
   CourseTeamRole,
   UploadedScormPackage,
   User,
@@ -154,17 +154,6 @@ const activityTypeToFrontend: Record<string, ActivityType> = {
   QUIZ: 'QUIZ',
   FILE: 'FILE',
   LINK: 'LINK',
-}
-
-function activityTypeToBackend(type: string): string {
-  const map: Record<string, string> = {
-    VIDEO: 'vml',
-    TEXT: 'vml',
-    QUIZ: 'qcm',
-    FILE: 'exercice',
-    LINK: 'discussion',
-  }
-  return map[type] ?? type
 }
 
 function questionTypeToFrontend(type: unknown): QuestionType {
@@ -480,20 +469,6 @@ function normalizeCommentList(data: unknown): ScenarioComment[] {
   return source.filter(isRecord).map(normalizeComment)
 }
 
-function normalizeScenarioActivity(raw: RawRecord): ScenarioActivityLog {
-  return {
-    id: idFrom(raw.id),
-    action: stringFrom(raw.action),
-    targetType: optionalStringFrom(raw.targetType),
-    targetId: optionalStringFrom(raw.targetId),
-    before: isRecord(raw.before) ? raw.before : undefined,
-    after: isRecord(raw.after) ? raw.after : undefined,
-    metadata: isRecord(raw.metadata) ? raw.metadata : undefined,
-    actor: isRecord(raw.actor) ? normalizeCollaborationUser(raw.actor) : undefined,
-    createdAt: stringFrom(raw.createdAt, new Date().toISOString()),
-  }
-}
-
 function normalizeScenarioNotification(raw: RawRecord): ScenarioNotification {
   const message = stringFrom(raw.message) as ScenarioNotification['message']
   return {
@@ -514,48 +489,6 @@ function normalizeScenarioNotificationList(data: unknown): ScenarioNotification[
   return source.filter(isRecord).map(normalizeScenarioNotification)
 }
 
-function normalizeActivityList(data: unknown): ScenarioActivityLog[] {
-  const source = Array.isArray(data)
-    ? data
-    : isRecord(data) && Array.isArray(data.data)
-      ? data.data
-      : []
-  return source.filter(isRecord).map(normalizeScenarioActivity)
-}
-
-function normalizeProposal(raw: RawRecord): ScenarioChangeProposal {
-  const status = stringFrom(raw.status).toLowerCase()
-  return {
-    id: idFrom(raw.id),
-    targetType: stringFrom(raw.targetType, 'course') as ScenarioChangeProposal['targetType'],
-    targetId: optionalStringFrom(raw.targetId),
-    summary: stringFrom(raw.summary),
-    patch: isRecord(raw.patch) ? raw.patch : undefined,
-    status: status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending',
-    decisionNote: optionalStringFrom(raw.decisionNote),
-    proposer: normalizeCollaborationUser(raw.proposer),
-    reviewer: isRecord(raw.reviewer) ? normalizeCollaborationUser(raw.reviewer) : undefined,
-    createdAt: stringFrom(raw.createdAt, new Date().toISOString()),
-    updatedAt: stringFrom(raw.updatedAt, new Date().toISOString()),
-    reviewedAt: optionalStringFrom(raw.reviewedAt),
-  }
-}
-
-function normalizeProposalList(data: unknown): ScenarioChangeProposal[] {
-  const source = Array.isArray(data)
-    ? data
-    : isRecord(data) && Array.isArray(data.data)
-      ? data.data
-      : []
-  return source.filter(isRecord).map(normalizeProposal)
-}
-
-function teamRoleToBackend(role?: CourseTeamRole): 'co_author' | 'reviewer' | undefined {
-  if (role === 'CO_AUTHOR') return 'co_author'
-  if (role === 'REVIEWER') return 'reviewer'
-  return undefined
-}
-
 function normalizeScenarioMutation(data: object): object {
   const raw = data as RawRecord
   return {
@@ -568,49 +501,6 @@ function normalizeScenarioMutation(data: object): object {
     title: undefined,
     status: undefined,
   }
-}
-
-function normalizeModuleMutation(data: object, scenarioId?: string): object {
-  const raw = data as RawRecord
-  return {
-    ...data,
-    titre: raw.titre ?? raw.title,
-    ordre: raw.ordre ?? raw.order,
-    scenarioId: scenarioId ? Number(scenarioId) : raw.scenarioId,
-    title: undefined,
-    order: undefined,
-  }
-}
-
-function normalizeSequenceMutation(data: object, moduleId?: string): object {
-  const raw = data as RawRecord
-  return {
-    ...data,
-    titre: raw.titre ?? raw.title,
-    ordre: raw.ordre ?? raw.order,
-    moduleId: moduleId ? Number(moduleId) : raw.moduleId,
-    title: undefined,
-    order: undefined,
-  }
-}
-
-function normalizeActivityMutation(data: object, sequenceId?: string): object {
-  const raw = data as RawRecord
-  return {
-    ...data,
-    titre: raw.titre ?? raw.title,
-    type: typeof raw.type === 'string' ? activityTypeToBackend(raw.type) : raw.type,
-    consigne: raw.consigne ?? raw.content,
-    ordre: raw.ordre ?? raw.order,
-    sequenceId: sequenceId ? Number(sequenceId) : raw.sequenceId,
-    title: undefined,
-    content: undefined,
-    order: undefined,
-  }
-}
-
-function normalizeReorderItems(ids: string[]): { id: number; ordre: number }[] {
-  return ids.map((id, ordre) => ({ id: Number(id), ordre }))
 }
 
 function normalizeQuizMutation(activityId: string, data: object): object {
@@ -796,15 +686,6 @@ export const scenariosApi = {
       response.data = response.data as CourseDocument
       return response
     }),
-  getScenarioDocument: (id: string) => api.get(`/scenarios/${id}/scenario-document`).then((response) => {
-    response.data = response.data as ScenarioDocument
-    return response
-  }),
-  updateScenarioDocument: (id: string, scenarioDocument: ScenarioDocument) =>
-    api.put(`/scenarios/${id}/scenario-document`, { scenarioDocument }).then((response) => {
-      response.data = response.data as ScenarioDocument
-      return response
-    }),
 
   submit:   (id: string) => api.patch(`/scenarios/${id}/submit`),
   approve:  (id: string) => api.patch(`/scenarios/${id}/approve`),
@@ -814,44 +695,11 @@ export const scenariosApi = {
   duplicate:(id: string) => api.post(`/scenarios/${id}/duplicate`),
   delete:   (id: string) => api.delete(`/scenarios/${id}`),
 
-  createModule: (scenarioId: string, data: object) =>
-    api.post('/modules', normalizeModuleMutation(data, scenarioId)),
-  updateModule: (_scenarioId: string, moduleId: string, data: object) =>
-    api.put(`/modules/${moduleId}`, normalizeModuleMutation(data)),
-  reorderModules: (scenarioId: string, moduleIds: string[]) =>
-    api.patch(`/modules/scenario/${scenarioId}/reorder`, {
-      items: normalizeReorderItems(moduleIds),
-    }),
-  deleteModule: (_scenarioId: string, moduleId: string) =>
-    api.delete(`/modules/${moduleId}`),
-
-  createSequence: (_scenarioId: string, moduleId: string, data: object) =>
-    api.post('/sequences', normalizeSequenceMutation(data, moduleId)),
-  updateSequence: (_scenarioId: string, _moduleId: string, seqId: string, data: object) =>
-    api.put(`/sequences/${seqId}`, normalizeSequenceMutation(data)),
-  reorderSequences: (_scenarioId: string, moduleId: string, sequenceIds: string[]) =>
-    api.patch(`/sequences/module/${moduleId}/reorder`, {
-      items: normalizeReorderItems(sequenceIds),
-    }),
-  deleteSequence: (_scenarioId: string, _moduleId: string, seqId: string) =>
-    api.delete(`/sequences/${seqId}`),
-
-  createActivity: (_scenarioId: string, _moduleId: string, seqId: string, data: object) =>
-    api.post('/activites', normalizeActivityMutation(data, seqId)),
-  updateActivity: (_scenarioId: string, _moduleId: string, _seqId: string, actId: string, data: object) =>
-    api.put(`/activites/${actId}`, normalizeActivityMutation(data)),
-  reorderActivities: (_scenarioId: string, _moduleId: string, seqId: string, activityIds: string[]) =>
-    api.patch(`/activites/sequence/${seqId}/reorder`, {
-      items: normalizeReorderItems(activityIds),
-    }),
-  deleteActivity: (_scenarioId: string, _moduleId: string, _seqId: string, actId: string) =>
-    api.delete(`/activites/${actId}`),
-
   getShares: (id: string) => api.get(`/scenario-shares/scenario/${id}`).then((response) => {
     response.data = normalizeShareList(response.data)
     return response
   }),
-  share: (id: string, data: { userId?: string; email?: string; permission?: SharePermission; role?: CourseTeamRole; canEditStructure?: boolean; canEditContent?: boolean; canPublish?: boolean }) =>
+  share: (id: string, data: { userId?: string; email?: string }) =>
     api.post('/scenario-shares', {
       scenarioId: Number(id),
       sharedWithId: data.userId ? Number(data.userId) : undefined,
@@ -861,17 +709,6 @@ export const scenariosApi = {
       canEditStructure: true,
       canEditContent: true,
       canPublish: true,
-    }).then((response) => {
-      response.data = isRecord(response.data) ? normalizeShare(response.data) : response.data
-      return response
-    }),
-  updateShare: (_id: string, shareId: string, data: Partial<{ permission: SharePermission; role: CourseTeamRole; canEditStructure: boolean; canEditContent: boolean; canPublish: boolean }>) =>
-    api.patch(`/scenario-shares/${shareId}`, {
-      permission: data.permission ? (data.permission === 'EDIT' ? 'edit' : 'view') : undefined,
-      role: teamRoleToBackend(data.role),
-      canEditStructure: data.canEditStructure,
-      canEditContent: data.canEditContent,
-      canPublish: data.canPublish,
     }).then((response) => {
       response.data = isRecord(response.data) ? normalizeShare(response.data) : response.data
       return response
@@ -892,29 +729,49 @@ export const scenariosApi = {
       response.data = isRecord(response.data) ? normalizeComment(response.data) : response.data
       return response
     }),
+  updateComment: (commentId: string, data: { body?: string; mentions?: string[] }) =>
+    api.put(`/scenario-shares/comments/${commentId}`, {
+      body: data.body?.trim(),
+      mentions: data.mentions?.map(Number),
+    }).then((response) => {
+      response.data = isRecord(response.data) ? normalizeComment(response.data) : response.data
+      return response
+    }),
   resolveComment: (_id: string, commentId: string) =>
     api.patch(`/scenario-shares/comments/${commentId}/resolve`).then((response) => {
       response.data = isRecord(response.data) ? normalizeComment(response.data) : response.data
       return response
     }),
-  getActivity: (id: string) => api.get(`/scenario-shares/scenario/${id}/activity`).then((response) => {
-    response.data = normalizeActivityList(response.data)
-    return response
-  }),
-  getProposals: (id: string) => api.get(`/scenario-shares/scenario/${id}/proposals`).then((response) => {
-    response.data = normalizeProposalList(response.data)
-    return response
-  }),
-  createProposal: (id: string, data: { targetType: ScenarioChangeProposal['targetType']; targetId?: string; summary: string; patch?: Record<string, unknown> }) =>
-    api.post(`/scenario-shares/scenario/${id}/proposals`, data).then((response) => {
-      response.data = isRecord(response.data) ? normalizeProposal(response.data) : response.data
+}
+
+export const aiCoursesApi = {
+  createOutline: (brief: AiCourseBrief) =>
+    api.post('/ai/courses/outline', brief).then((response) => {
+      response.data = response.data as AiCourseOutline
       return response
     }),
-  reviewProposal: (_id: string, proposalId: string, data: { status: 'approved' | 'rejected'; decisionNote?: string }) =>
-    api.patch(`/scenario-shares/proposals/${proposalId}/review`, data).then((response) => {
-      response.data = isRecord(response.data) ? normalizeProposal(response.data) : response.data
+  create: (brief: AiCourseBrief, outline?: AiCourseOutline) =>
+    api.post('/ai/courses', { ...brief, outline }).then((response) => {
+      response.data = normalizeScenarioResponse(response.data)
       return response
     }),
+  proposeEdit: (
+    scenarioId: string,
+    payload: {
+      instruction: string
+      scope: { type: 'course' } | { type: 'lesson'; lessonId: string } | { type: 'block'; lessonId: string; blockId: string }
+      courseDocument: CourseDocument
+      expectedVersion: number
+    },
+  ) => api.post(`/ai/courses/${scenarioId}/changes`, payload).then((response) => {
+    response.data = response.data as AiChangeSet
+    return response
+  }),
+  apply: (changeSetId: string) => api.post(`/ai/courses/changes/${changeSetId}/apply`).then((response) => {
+    response.data = response.data as CourseDocument
+    return response
+  }),
+  reject: (changeSetId: string) => api.post(`/ai/courses/changes/${changeSetId}/reject`),
 }
 
 export const mediaApi = {

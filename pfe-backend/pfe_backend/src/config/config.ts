@@ -19,5 +19,8 @@ export default () => {
       secretCode: jwtSecret,
       jwtTime: process.env.JWT_EXPIRES || '24h',
     },
+    ai: {
+      groqApiKey: process.env.GROQ_API_KEY,
+    },
   };
 };

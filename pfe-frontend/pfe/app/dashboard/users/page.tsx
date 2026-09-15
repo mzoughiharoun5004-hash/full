@@ -77,11 +77,6 @@ export default function UsersPage() {
   const totalPages = Math.max(1, Math.ceil(sortedUsers.length / itemsPerPage))
   const paginatedUsers = sortedUsers.slice((page - 1) * itemsPerPage, page * itemsPerPage)
 
-  // Reset page when it exceeds bounds (e.g. after delete) — useEffect avoids setState during render
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages)
-  }, [page, totalPages])
-
   const closeForm = () => {
     setFormOpen(false)
     setEditingUser(null)
@@ -140,6 +135,10 @@ export default function UsersPage() {
     mutationFn: (id: string) => usersApi.delete(id),
     onSuccess: () => {
       toast.success('User deleted')
+      setPage((currentPage) => Math.min(
+        currentPage,
+        Math.max(1, Math.ceil(Math.max(0, sortedUsers.length - 1) / itemsPerPage)),
+      ))
       qc.invalidateQueries({ queryKey: ['users'] })
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, 'Failed to delete user')),
@@ -418,4 +417,3 @@ export default function UsersPage() {
     </div>
   )
 }
-

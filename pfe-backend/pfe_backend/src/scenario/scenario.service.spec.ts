@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Brackets } from 'typeorm';
 import { StatutScenario } from 'src/common/enums';
 import { Scenario } from './scenario.entity';

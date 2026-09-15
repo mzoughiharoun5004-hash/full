@@ -1,6 +1,5 @@
 "use client"
 
-import type { Metadata } from 'next'
 import { Providers } from '@/context/Providers'
 import './globals.css'
 import { useEffect } from 'react'

@@ -53,17 +53,8 @@ import type {
   CourseTheme,
 } from '@/types'
 
-export type CourseFormat = 'Linear' | 'Branching' | 'Hybrid' | 'Assessment-Only'
 export type EditorView = 'structure' | 'lesson'
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error' | 'conflict'
-
-export interface CourseFormatDefinition {
-  label: CourseFormat
-  description: string
-  guidance: string
-  requiresBranching: boolean
-  assessmentOnly: boolean
-}
 
 export interface BlockDefinition {
   type: CourseBlockType
@@ -218,55 +209,8 @@ export const blockCatalog: BlockDefinition[] = [
 
 export const blockCategories = Array.from(new Set(blockCatalog.map((block) => block.categoryLabel)))
 
-export const courseFormatDefinitions: Record<CourseFormat, CourseFormatDefinition> = {
-  Linear: {
-    label: 'Linear',
-    description: 'A guided sequence of lessons that learners complete in order.',
-    guidance: 'Build content lessons, optionally followed by a knowledge check or final quiz.',
-    requiresBranching: false,
-    assessmentOnly: false,
-  },
-  Branching: {
-    label: 'Branching',
-    description: 'A decision-led experience where learner choices route to different course items.',
-    guidance: 'Add at least one choice point with two or more linked destinations.',
-    requiresBranching: true,
-    assessmentOnly: false,
-  },
-  Hybrid: {
-    label: 'Hybrid',
-    description: 'A linear learning path with one or more decision-based moments.',
-    guidance: 'Include completed content lessons and at least one choice point with linked destinations.',
-    requiresBranching: true,
-    assessmentOnly: false,
-  },
-  'Assessment-Only': {
-    label: 'Assessment-Only',
-    description: 'A scored assessment without instructional content lessons.',
-    guidance: 'Use quiz items only and require a passing score before completion.',
-    requiresBranching: false,
-    assessmentOnly: true,
-  },
-}
-
-export const formatOptions: CourseFormat[] = Object.keys(courseFormatDefinitions) as CourseFormat[]
-
 export const branchingDecisionBlockTypes: CourseBlockType[] = ['choice_point', 'branching_dialogue']
 
-export function normalizeCourseFormat(value: unknown): CourseFormat {
-  return typeof value === 'string' && value in courseFormatDefinitions
-    ? value as CourseFormat
-    : 'Linear'
-}
-
-export function getCourseFormat(document: Pick<CourseDocument, 'metadata'>): CourseFormat {
-  return normalizeCourseFormat(document.metadata?.format)
-}
-
-/**
- * Applies a format's safe defaults without deleting or converting existing
- * lessons. Readiness then identifies any remaining authoring work.
- */
 const defaultTheme: CourseTheme = {
   accentColor: '#0F6B4A',
   fontPairing: 'modern',
@@ -274,40 +218,6 @@ const defaultTheme: CourseTheme = {
   navigationMode: 'continuous',
   lessonNumbers: true,
   sidebarEnabled: true,
-}
-
-/**
- * Applies a format's safe defaults without deleting or converting existing
- * lessons. Readiness then identifies any remaining authoring work.
- */
-export function applyCourseFormat(document: CourseDocument, format: CourseFormat): CourseDocument {
-  const normalizedFormat = normalizeCourseFormat(format)
-  const formatDefaults = normalizedFormat === 'Assessment-Only'
-    ? {
-        settings: { completionMode: 'score' as const, requireQuizPass: true },
-        theme: { navigationMode: 'compact' as const, sidebarEnabled: true },
-      }
-    : normalizedFormat === 'Branching'
-      ? {
-          settings: { completionMode: 'pages' as const, requireQuizPass: false },
-          theme: { navigationMode: 'compact' as const, sidebarEnabled: true },
-        }
-      : normalizedFormat === 'Hybrid'
-        ? {
-            settings: { completionMode: 'pages' as const, requireQuizPass: false },
-            theme: { navigationMode: 'sidebar' as const, sidebarEnabled: true },
-          }
-        : {
-            settings: { completionMode: 'pages' as const, requireQuizPass: false },
-            theme: { navigationMode: 'continuous' as const, sidebarEnabled: true },
-          }
-
-  return syncCourseDocument({
-    ...document,
-    settings: { ...document.settings, ...formatDefaults.settings },
-    theme: { ...defaultTheme, ...document.theme, ...formatDefaults.theme },
-    metadata: { ...document.metadata, format: normalizedFormat },
-  })
 }
 
 const defaultPublish: CoursePublishSettings = {
@@ -522,7 +432,6 @@ export function createEmptyCourseDocument(title: string, authorName: string): Co
       authorName,
       audience: '',
       duration: '',
-      format: 'Linear',
       tone: '',
       scorm: { ...createDefaultScormSettings(title, '') },
     },
@@ -530,6 +439,7 @@ export function createEmptyCourseDocument(title: string, authorName: string): Co
 }
 
 export function normalizeCourseDocument(document: CourseDocument, authorName: string): CourseDocument {
+  const { format: _deprecatedFormat, ...metadata } = (document.metadata ?? {}) as typeof document.metadata & { format?: unknown }
   const lessons = (document.lessons?.length ? document.lessons : document.pages.map(pageToLesson)).map((lesson) =>
     normalizeQuizLesson({
       ...lesson,
@@ -551,12 +461,11 @@ export function normalizeCourseDocument(document: CourseDocument, authorName: st
     theme: { ...defaultTheme, ...document.theme },
     publish: { ...defaultPublish, ...document.publish },
     metadata: {
-      ...document.metadata,
-      source: 'course_engine',
+      ...metadata,
+      source: document.metadata?.source === 'ai_draft' ? 'ai_draft' : 'course_engine',
       authorName: typeof document.metadata?.authorName === 'string' ? document.metadata.authorName : authorName,
       audience: typeof document.metadata?.audience === 'string' ? document.metadata.audience : '',
       duration: typeof document.metadata?.duration === 'string' ? document.metadata.duration : '',
-      format: normalizeCourseFormat(document.metadata?.format),
       tone: typeof document.metadata?.tone === 'string' ? document.metadata.tone : '',
       scorm: {
         ...createDefaultScormSettings(document.title ?? '', document.description ?? ''),
@@ -606,7 +515,7 @@ export function syncCourseDocument(document: CourseDocument): CourseDocument {
     },
     metadata: {
       ...document.metadata,
-      source: 'course_engine',
+      source: document.metadata?.source === 'ai_draft' ? 'ai_draft' : 'course_engine',
       updatedAt: new Date().toISOString(),
     },
   }
@@ -783,8 +692,6 @@ export function blockHasContent(block: CourseBlock) {
 export function getCourseReadiness(document: CourseDocument): CourseReadiness {
   const lessons = document.lessons ?? []
   const quizLessons = lessons.filter((lesson) => lesson.type === 'quiz')
-  const contentLessons = lessons.filter((lesson) => lesson.type === 'lesson' && lesson.blocks.some(blockHasContent))
-  const courseFormat = getCourseFormat(document)
   const branchingDecisions = lessons.flatMap((lesson) =>
     lesson.blocks
       .filter((block) => branchingDecisionBlockTypes.includes(block.type))
@@ -859,51 +766,7 @@ export function getCourseReadiness(document: CourseDocument): CourseReadiness {
     severity: 'error',
     message: 'Add a quiz before requiring learners to pass one.',
   })
-  if (courseFormat === 'Assessment-Only') {
-    addCheck(quizLessons.length > 0, {
-      id: 'assessment-only-quiz',
-      severity: 'error',
-      message: 'An assessment-only course needs at least one quiz.',
-    })
-    addCheck(lessons.every((lesson) => lesson.type === 'quiz'), {
-      id: 'assessment-only-content',
-      severity: 'error',
-      message: 'Assessment-only courses can contain quiz items only.',
-    })
-    addCheck(document.settings.completionMode === 'score', {
-      id: 'assessment-only-score-completion',
-      severity: 'error',
-      message: 'Assessment-only courses must use score-based completion.',
-    })
-    addCheck(Boolean(document.settings.requireQuizPass), {
-      id: 'assessment-only-require-pass',
-      severity: 'error',
-      message: 'Assessment-only courses must require a quiz pass.',
-    })
-  }
-
-  if (courseFormat === 'Linear') {
-    addCheck(branchingDecisions.length === 0, {
-      id: 'linear-branching-content',
-      severity: 'warning',
-      message: 'This linear course contains choice points. Use the branching or hybrid format if learners should follow those routes.',
-    })
-  }
-
-  if (courseFormat === 'Branching' || courseFormat === 'Hybrid') {
-    addCheck(branchingDecisions.length > 0, {
-      id: 'branching-decision',
-      severity: 'error',
-      message: `${courseFormat} courses need at least one choice point or branching dialogue.`,
-    })
-    if (courseFormat === 'Hybrid') {
-      addCheck(contentLessons.length > 0, {
-        id: 'hybrid-content',
-        severity: 'error',
-        message: 'Hybrid courses need at least one completed instructional lesson in addition to their branching content.',
-      })
-    }
-
+  if (branchingDecisions.length > 0) {
     for (const { lesson, block } of branchingDecisions) {
       const choices = (block.items ?? []).filter((item) => item.title?.trim())
       const validDestinations = choices.filter(

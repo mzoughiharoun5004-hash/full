@@ -24,6 +24,53 @@ import type { Scenario } from '@/types'
 
 interface Ctx { id: string }
 
+interface ContentStructureItem {
+  id: string
+  label: string
+  title: string
+  detail: string
+}
+
+function getContentStructureItems(scenario: Scenario): ContentStructureItem[] {
+  const lessons = scenario.courseDocument?.lessons
+  if (Array.isArray(lessons) && lessons.length > 0) {
+    return lessons.map((lesson, index) => {
+      const questionCount = lesson.quiz?.questions.length ?? 0
+      const blockCount = lesson.blocks.length
+      return {
+        id: lesson.id,
+        label: lesson.type === 'quiz' ? `Quiz ${index + 1}` : `Lesson ${index + 1}`,
+        title: lesson.title,
+        detail: lesson.type === 'quiz'
+          ? `${questionCount} question${questionCount !== 1 ? 's' : ''}`
+          : `${blockCount} block${blockCount !== 1 ? 's' : ''}`,
+      }
+    })
+  }
+
+  const pages = scenario.courseDocument?.pages
+  if (Array.isArray(pages) && pages.length > 0) {
+    return pages.map((page, index) => {
+      const blockCount = page.blocks?.length ?? page.quiz?.questions.length ?? 0
+      return {
+        id: page.id,
+        label: page.type === 'quiz' ? `Quiz ${index + 1}` : `Page ${index + 1}`,
+        title: page.title,
+        detail: page.type === 'quiz'
+          ? `${blockCount} question${blockCount !== 1 ? 's' : ''}`
+          : `${blockCount} block${blockCount !== 1 ? 's' : ''}`,
+      }
+    })
+  }
+
+  return (scenario.modules ?? []).map((mod, index) => ({
+    id: mod.id,
+    label: `Module ${index + 1}`,
+    title: mod.title,
+    detail: `${mod.sequences?.length ?? 0} sequence${(mod.sequences?.length ?? 0) !== 1 ? 's' : ''}`,
+  }))
+}
+
 export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> }) {
   const { id } = use(params)
   const { user, isAdmin } = useAuth()
@@ -71,6 +118,7 @@ export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> })
     scenario.author,
     scenario.ownerId ? `User #${scenario.ownerId}` : 'Unknown owner',
   )
+  const contentStructureItems = getContentStructureItems(scenario)
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -129,20 +177,15 @@ export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> })
             </CardHeader>
             <CardBody>
               <div className="space-y-4">
-                {scenario.modules?.map((mod, i) => (
-                  <div key={mod.id} className="border border-white/10 rounded-lg p-3 bg-white/5">
-                    <div className="font-medium text-slate-200 text-sm mb-2">Module {i + 1}: {mod.title}</div>
-                    <div className="space-y-2 pl-4 border-l border-white/10">
-                      {mod.sequences?.map(seq => (
-                        <div key={seq.id} className="text-xs text-slate-400">
-                          <span className="text-slate-300">{seq.title}</span> — {seq.activities?.length ?? 0} activities
-                        </div>
-                      ))}
-                    </div>
+                {contentStructureItems.map((item) => (
+                  <div key={item.id} className="border border-white/10 rounded-lg p-3 bg-white/5">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.label}</div>
+                    <div className="mt-1 font-medium text-slate-200 text-sm">{item.title}</div>
+                    <div className="mt-2 text-xs text-slate-400">{item.detail}</div>
                   </div>
                 ))}
-                {(!scenario.modules || scenario.modules.length === 0) && (
-                  <p className="text-xs text-slate-500 text-center py-4">No modules added yet.</p>
+                {contentStructureItems.length === 0 && (
+                  <p className="text-xs text-slate-500 text-center py-4">No content added yet.</p>
                 )}
               </div>
             </CardBody>

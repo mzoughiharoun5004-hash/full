@@ -1,10 +1,10 @@
 \# Project Memory \& Token Constraints
 
-
+See ARCHITECTURE.md at the repo root for the module map, data model, auth model, and a running list of known issues. Update it when you touch a module.
 
 \## Technology Stack
 
-\- Next.js 14, TypeScript, TailwindCSS
+\- Next.js 16, TypeScript, TailwindCSS
 
 
 

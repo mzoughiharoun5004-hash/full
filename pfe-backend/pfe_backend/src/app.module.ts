@@ -21,6 +21,7 @@ import { ScenarioShareModule } from './scenario-share/scenario-share.module';
 import { MediaModule } from './media/media.module';
 import { ScormModule } from './scorm/scorm.module';
 import { ScenarioCollaborationModule } from './scenario-collaboration/scenario-collaboration.module';
+import { AiCourseModule } from './ai-course/ai-course.module';
 import { RoleGuard } from './role/role.guard';
 import config from './config/config';
 import dbConfig from './config/db.config';
@@ -63,6 +64,7 @@ import dbConfig from './config/db.config';
     ScenarioCollaborationModule,
     ScormModule,
     MediaModule,
+    AiCourseModule,
   ],
   providers: [
     // Apply throttle guard globally — add @SkipThrottle() to non-sensitive GET endpoints

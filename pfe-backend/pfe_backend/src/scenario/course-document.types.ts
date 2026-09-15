@@ -1,10 +1,5 @@
 export type CoursePageType = 'lesson' | 'branching_scenario' | 'quiz' | 'media';
 export type CourseLessonType = 'lesson' | 'quiz';
-export type CourseFormat =
-  | 'Linear'
-  | 'Branching'
-  | 'Hybrid'
-  | 'Assessment-Only';
 export type CourseBlockCategory =
   | 'text'
   | 'text_narrative'
@@ -271,7 +266,6 @@ export interface CourseDocument {
     generatedAt?: string;
     version?: number;
     assetBaseUrl?: string;
-    format?: CourseFormat;
     tone?: string;
     audience?: string;
     durationTag?: string;

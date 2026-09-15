@@ -2186,12 +2186,15 @@ export class ScormService implements OnModuleDestroy {
 
   private buildManifest(scenario: Scenario, course: CourseDocument): string {
     const scorm = this.courseScormSettings(course);
+    const courseIdentifier =
+      typeof scorm.courseIdentifier === 'string'
+        ? scorm.courseIdentifier
+        : undefined;
     const uid = this.scormIdentifier(
-      String(scorm.courseIdentifier ?? `SCO_${scenario.id}_${Date.now()}`),
+      courseIdentifier ?? `SCO_${scenario.id}_${Date.now()}`,
     );
-    const title = this.escXml(
-      String(scorm.lmsTitle ?? '').trim() || course.title,
-    );
+    const lmsTitle = typeof scorm.lmsTitle === 'string' ? scorm.lmsTitle : '';
+    const title = this.escXml(lmsTitle.trim() || course.title);
     const files = [
       'index.html',
       'course.json',

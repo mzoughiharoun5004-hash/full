@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 
 interface ConfirmDialogProps {
   open: boolean
   title: string
-  description?: string
+  description?: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'warning' | 'default'
@@ -68,9 +68,9 @@ export function ConfirmDialog({
           {title}
         </h2>
         {description && (
-          <p id={descriptionId} className="mt-2 text-sm text-[var(--lux-muted)]">
+          <div id={descriptionId} className="mt-2 text-sm text-[var(--lux-muted)]">
             {description}
-          </p>
+          </div>
         )}
         <div className="mt-5 flex justify-end gap-2.5">
           <Button ref={cancelRef} type="button" variant="secondary" size="sm" onClick={onCancel}>

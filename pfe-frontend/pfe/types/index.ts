@@ -309,11 +309,49 @@ export interface CourseDocument {
     authorName?: string
     audience?: string
     duration?: string
-    format?: 'Linear' | 'Branching' | 'Hybrid' | 'Assessment-Only' | string
     tone?: string
     assetBaseUrl?: string
     scorm?: Record<string, unknown>
   }
+}
+
+export interface AiCourseBrief {
+  topic: string
+  audience: string
+  language: string
+  difficulty: string
+  objectives: string[]
+  estimatedMinutes: number
+  tone?: string
+  sourceMaterial?: string
+}
+
+export interface AiCourseOutline {
+  title: string
+  description: string
+  objectives: string[]
+  estimatedMinutes: number
+  lessons: Array<{ title: string; summary: string; estimatedMinutes: number }>
+}
+
+export interface AiCoursePatch {
+  op: string
+  lessonId?: string
+  blockId?: string
+  [key: string]: unknown
+}
+
+export interface AiChangeSet {
+  id: string
+  status: 'proposed' | 'applied' | 'rejected' | 'cancelled' | 'failed'
+  kind: 'creation' | 'edit'
+  instruction: string
+  courseDocumentVersion: number
+  proposal: { summary?: string; patches?: AiCoursePatch[]; courseDocument?: CourseDocument }
+  metadata?: Record<string, unknown> | null
+  failureReason?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type ScenarioNodeType =
@@ -580,33 +618,6 @@ export interface ScenarioComment {
   createdAt: string
   updatedAt: string
   resolvedAt?: string
-}
-
-export interface ScenarioActivityLog {
-  id: string
-  action: string
-  targetType?: string
-  targetId?: string
-  before?: Record<string, unknown>
-  after?: Record<string, unknown>
-  metadata?: Record<string, unknown>
-  actor?: User
-  createdAt: string
-}
-
-export interface ScenarioChangeProposal {
-  id: string
-  targetType: CollaborationTargetType
-  targetId?: string
-  summary: string
-  patch?: Record<string, unknown>
-  status: 'pending' | 'approved' | 'rejected'
-  decisionNote?: string
-  proposer: User
-  reviewer?: User
-  createdAt: string
-  updatedAt: string
-  reviewedAt?: string
 }
 
 // ─── Analytics ───────────────────────────────────────────────────────────────

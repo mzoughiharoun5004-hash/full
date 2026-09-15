@@ -65,7 +65,6 @@ import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { Spinner } from '@/components/ui/Spinner'
 import { SidebarToggleButton } from '@/components/layout/SidebarToggleButton'
 import { getApiErrorMessage, mediaApi, scenariosApi, scormApi, usersApi } from '@/lib/api'
 import { approvedCollaboratorViewOnlyMessage } from '@/lib/scenarioActions'
@@ -91,21 +90,18 @@ import type {
   User,
 } from '@/types'
 import {
-  applyCourseFormat,
   authorNameFrom,
   branchingDecisionBlockTypes,
   blockHasContent,
-  courseFormatDefinitions,
   createBlock,
   createEmptyCourseDocument,
   createLesson,
+  createManifestPreview,
   createQuizQuestion,
   duplicateBlock,
   duplicateLesson,
   formatCourseDuration,
-  formatOptions,
   getBlockDefinition,
-  getCourseFormat,
   getCourseReadiness,
   getCourseEstimatedMinutes,
   getScormSettings,
@@ -121,12 +117,12 @@ import {
   uid,
   type CourseReadiness,
   type CanonicalQuizQuestionType,
-  type CourseFormat,
   type ScormSettings,
   type SaveStatus,
 } from './courseEditorModel'
 import { useCourseDocumentAutosave } from './useCourseDocumentAutosave'
 import { MediaPicker } from '../MediaPicker'
+import { AiCourseCreationWizard, AiCourseEditControl } from './AiCourseControls'
 
 interface InlineScenarioCourseEditorProps {
   mode: 'create' | 'edit'
@@ -333,6 +329,7 @@ export function InlineScenarioCourseEditor({
   scenario,
   readOnly = false,
   viewOnlyMessage,
+  canAccessComments: canAccessCommentsProp = false,
   initialPreviewOpen = false,
   loadedDocument,
 }: InlineScenarioCourseEditorProps) {
@@ -360,10 +357,9 @@ export function InlineScenarioCourseEditor({
   const [view, setView] = useState<EditorViewState>({ type: 'structure' })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(initialPreviewOpen)
-  const [isLoading, setIsLoading] = useState(false)
-  const [documentLoadFailed, setDocumentLoadFailed] = useState(false)
   const [collaboratorEmail, setCollaboratorEmail] = useState('')
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const editorRootRef = useRef<HTMLDivElement | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
   const lessonInputRef = useRef<HTMLInputElement | null>(null)
@@ -373,24 +369,12 @@ export function InlineScenarioCourseEditor({
     user?.id && String(scenarioOwnerId ?? user.id) === String(user.id),
   )
 
-// Improved: Comments accessible when user has appropriate permissions and scenario is in
-  // a state where comments make sense (not arbitrary show/hide based only on readOnly)
-  const canAccessComments = useMemo(() => {
-    // Never in read-only mode
-    if (readOnly) return false
-    // Owner always has comment access (except archived scenarios)
-    if (isScenarioOwner) {
-      return scenario?.statut !== 'archived'
-    }
-    // For non-owners with edit shares: comments allowed in draft and review states
-    if (!isAdmin && scenario?.statut) {
-      const commentAllowedStatuses = ['brouillon', 'en_cours_validation']
-      return commentAllowedStatuses.includes(scenario.statut?.toLowerCase() ?? '')
-    }
-    // Admins can view but typically not comment on others' scenarios
-    // Collaborators with proper shares might have access via share permissions
-    return false
-}, [readOnly, isScenarioOwner, scenario?.statut, isAdmin])
+  const scenarioStatus = scenario?.statut?.toLowerCase()
+  const canAccessComments = canAccessCommentsProp
+    && !readOnly
+    && (isScenarioOwner
+      ? scenarioStatus !== 'archived'
+      : !isAdmin && ['brouillon', 'en_cours_validation'].includes(scenarioStatus ?? ''))
 
   const normalizedLoadedDocument = useMemo(
     () => loadedDoc ? normalizeCourseDocument(loadedDoc, authorName) : null,
@@ -502,6 +486,13 @@ const autosave = useCourseDocumentAutosave({
     baselineKey: persistedScenarioId,
     baselineDocument: mode === 'edit' ? normalizedLoadedDocument : createdBaselineDocument,
     onSaved: (savedDocument) => {
+      setDocument((current) => ({
+        ...current,
+        metadata: {
+          ...current.metadata,
+          version: savedDocument.metadata?.version ?? current.metadata?.version,
+        },
+      }))
       qc.setQueryData(['course-document', persistedScenarioId], savedDocument)
       qc.invalidateQueries({ queryKey: ['scenario-activity', persistedScenarioId] })
       if (persistedScenarioId) {
@@ -514,14 +505,36 @@ const autosave = useCourseDocumentAutosave({
       }
       setSavingProgress('saved')
       toast.success('Auto-saved', {
-        description: 'Your changes were saved automatically',
         duration: 2000,
-      } as any)
+      })
     },
-    onError: (error: unknown) => {
+    onError: () => {
       setSavingProgress('error')
     },
   })
+
+  const handleAiApplied = useCallback((appliedDoc: CourseDocument) => {
+    const normalized = normalizeCourseDocument(appliedDoc, authorName)
+    setDocument(normalized)
+    autosave.syncSavedDocument(normalized)
+    if (persistedScenarioId) {
+      qc.setQueryData(['course-document', persistedScenarioId], normalized)
+      qc.invalidateQueries({ queryKey: ['scenario', persistedScenarioId] })
+      qc.invalidateQueries({ queryKey: ['scenario-activity', persistedScenarioId] })
+      broadcastScenarioEdit({
+        scenarioId: persistedScenarioId,
+        entityType: 'course',
+        action: 'update',
+        entityId: normalized.id,
+      })
+    }
+  }, [authorName, autosave, broadcastScenarioEdit, persistedScenarioId, qc])
+
+  const flushUnsavedBeforeAiPropose = useCallback(async () => {
+    if (autosave.status === 'dirty') {
+      await autosave.retry()
+    }
+  }, [autosave])
 
   const saveStatus: SaveStatus = readOnly
     ? 'saved'
@@ -703,7 +716,7 @@ const autosave = useCourseDocumentAutosave({
 
   const addLesson = useCallback((title: string, sectionId: string, type: CourseLesson['type'] = 'lesson') => {
     const nextTitle = title.trim()
-    if (!nextTitle) return false
+    if (!nextTitle) return null
     const lesson = type === 'quiz'
       ? setLessonKind(createLesson(nextTitle), 'quiz')
       : createLesson(nextTitle)
@@ -719,7 +732,7 @@ const autosave = useCourseDocumentAutosave({
         sections,
       }
     })
-    return true
+    return lesson.id
   }, [updateDocument])
 
   const updateLesson = useCallback((lessonId: string, updater: (lesson: CourseLesson) => CourseLesson) => {
@@ -770,14 +783,16 @@ const autosave = useCourseDocumentAutosave({
   // New: Memoize conflict details for display
   const conflictDetails = useMemo(() => {
     if (!normalizedLoadedDocument || !lastEdit) return null
+    const lastEditUser = [
+      lastEdit.user?.firstName,
+      lastEdit.user?.lastName,
+    ].filter(Boolean).join(' ') || lastEdit.user?.email || 'unknown user'
+
     return {
-      lastEditTime: lastEdit.timestamp
-        ? new Date(lastEdit.timestamp).toLocaleString()
+      lastEditTime: lastEdit.sentAt
+        ? new Date(lastEdit.sentAt).toLocaleString()
         : 'unknown',
-      lastEditUser: lastEdit.user
-        ?.name || lastEdit.user?.email
-        ? lastEdit.user.name || lastEdit.user.email
-        : 'unknown user',
+      lastEditUser,
       lastEditAction: lastEdit.action,
     }
   }, [normalizedLoadedDocument, lastEdit])
@@ -798,30 +813,6 @@ const autosave = useCourseDocumentAutosave({
     scrollCourseToTop()
   }, [document.id, mode, scrollCourseToTop, view.type])
 
-  if (mode === 'edit' && isLoading && !loadedDocument) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[var(--lux-bg)]">
-        <Spinner />
-      </div>
-    )
-  }
-
-  if (mode === 'edit' && documentLoadFailed && !loadedDocument) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-[var(--lux-bg)] px-4">
-        <div className="max-w-md text-center">
-          <AlertTriangle className="mx-auto text-amber-500" size={28} />
-          <h1 className="mt-4 text-lg font-bold text-[var(--lux-text-strong)]">Course could not be loaded</h1>
-          <p className="mt-2 text-sm text-[var(--lux-muted)]">Check your connection and reload the page. No editor changes have been started.</p>
-          <Button className="mt-5" onClick={() => window.location.reload()}>
-            <RefreshCw size={15} />
-            Reload
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div ref={editorRootRef} className="rise-editor min-h-full bg-[var(--lux-bg)] font-sans text-[var(--lux-text)]">
       {showCommentsRail && (
@@ -829,6 +820,16 @@ const autosave = useCourseDocumentAutosave({
           scenarioId={persistedScenarioId as string}
           comments={comments}
           readOnly={readOnly}
+          isOpen={commentsOpen}
+          lessons={document.lessons ?? []}
+          activeLessonId={selectedLesson?.id}
+          currentUserId={user?.id}
+          onClose={() => setCommentsOpen(false)}
+          onOpenLesson={(lessonId) => {
+            setSettingsOpen(false)
+            setCommentsOpen(false)
+            setView({ type: 'lesson', lessonId })
+          }}
           onCommentChange={(commentId, action) => {
             broadcastScenarioEdit({
               scenarioId: persistedScenarioId as string,
@@ -846,6 +847,9 @@ const autosave = useCourseDocumentAutosave({
         showRetry={saveStatus === 'error' || saveStatus === 'conflict'}
         collaborators={collaborators}
         openComments={comments.filter((comment) => comment.status === 'open').length}
+        canOpenComments={showCommentsRail}
+        commentsOpen={commentsOpen}
+        onToggleComments={() => setCommentsOpen((current) => !current)}
       />
       <ConfirmDialog
         open={conflictDialogOpen}
@@ -874,7 +878,7 @@ const autosave = useCourseDocumentAutosave({
         </div>
       )}
 
-      <div className={cn(showCommentsRail && 'lg:pl-[340px]')}>
+      <div className={cn(showCommentsRail && commentsOpen && 'lg:pl-[340px]')}>
         {view.type === 'structure' ? (
         <main className="min-h-[calc(100vh-2.5rem)] bg-[var(--lux-bg)] px-4 pb-6 sm:px-8">
           <div className="sticky top-10 z-30 -mx-4 mb-5 border-b border-[var(--lux-line)] bg-[var(--lux-bg)]/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8">
@@ -916,6 +920,16 @@ const autosave = useCourseDocumentAutosave({
                           <SlidersHorizontal size={14} className="mr-1" />
                           Course settings
                         </Button>
+                        {persistedScenarioId && (
+                          <AiCourseEditControl
+                            scenarioId={persistedScenarioId}
+                            document={document}
+                            scope={{ type: 'course' }}
+                            courseDocumentVersion={autosave.savedVersion}
+                            onApplied={handleAiApplied}
+                            onBeforePropose={flushUnsavedBeforeAiPropose}
+                          />
+                        )}
                       </>
                     )}
                   </>
@@ -926,6 +940,13 @@ const autosave = useCourseDocumentAutosave({
 
           {!titleCommitted ? (
             <section className="mx-auto mt-8 max-w-[952px] px-0 py-8 sm:mt-12 sm:py-12">
+              {mode === 'create' && !readOnly && (
+                <div className="mb-8">
+                  <AiCourseCreationWizard
+                    onCreated={(created) => window.location.assign(`/dashboard/scenarios/${created.id}/edit`)}
+                  />
+                </div>
+              )}
               <p className="sr-only">New course</p>
               <div className="flex items-start gap-3">
                 <input
@@ -983,6 +1004,7 @@ const autosave = useCourseDocumentAutosave({
               settingsOpen={settingsOpen}
               scenarioId={persistedScenarioId}
               readOnly={readOnly}
+              readiness={readiness}
               onUpdateDocument={updateDocument}
               onEditTitle={() => {
                 setTitleDraft(document.title)
@@ -1038,6 +1060,10 @@ const autosave = useCourseDocumentAutosave({
           }}
           onUpdateDocument={updateDocument}
           onUpdateLesson={(updater) => updateLesson(selectedLesson.id, updater)}
+          aiScenarioId={!readOnly && persistedScenarioId ? persistedScenarioId : undefined}
+          courseDocumentVersion={autosave.savedVersion}
+          onAiApplied={handleAiApplied}
+          onBeforeAiPropose={flushUnsavedBeforeAiPropose}
         />
       ) : null}
       </div>
@@ -1056,6 +1082,9 @@ function TopSaveBar({
   onRetry,
   collaborators,
   openComments,
+  canOpenComments,
+  commentsOpen,
+  onToggleComments,
 }: {
   status: SaveStatus
   label: string
@@ -1063,6 +1092,9 @@ function TopSaveBar({
   onRetry: () => void
   collaborators: CollaborationUser[]
   openComments: number
+  canOpenComments: boolean
+  commentsOpen: boolean
+  onToggleComments: () => void
 }) {
   return (
     <div className="sticky top-0 z-30 flex h-10 items-center justify-between border-b border-[var(--lux-line)] bg-[var(--lux-surface)]/95 px-4 backdrop-blur">
@@ -1081,10 +1113,16 @@ function TopSaveBar({
           {!collaborators.length && <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--lux-overlay)]"><UsersIcon /></span>}
         </span>
         <span>{collaborators.length} online</span>
-        {openComments > 0 && (
-          <span className="rounded-full bg-[var(--lux-primary-soft)] px-2 py-0.5 text-[10px] text-[var(--lux-primary-muted)]">
-            {openComments} comments
-          </span>
+        {canOpenComments && (
+          <button
+            type="button"
+            onClick={onToggleComments}
+            aria-pressed={commentsOpen}
+            className="inline-flex items-center gap-1 rounded-full bg-[var(--lux-primary-soft)] px-2 py-0.5 text-[10px] text-[var(--lux-primary-muted)] transition hover:bg-[var(--lux-primary)]/15"
+          >
+            <MessageCircle size={12} />
+            {openComments} open
+          </button>
         )}
       </div>
       <button
@@ -1374,29 +1412,52 @@ function collaborationUserName(user: CollaborationUser | ScenarioComment['author
   return fullName || user.email || `User #${user.id}`
 }
 
-function commentTargetLabel(comment: ScenarioComment) {
+function commentTargetLabel(comment: ScenarioComment, lessons: CourseLesson[]) {
   if (comment.targetType === 'course') return 'Course'
-  const label = comment.targetType.charAt(0).toUpperCase() + comment.targetType.slice(1)
-  return comment.targetId ? `${label} ${comment.targetId}` : label
+  if (comment.targetType === 'lesson') {
+    return lessons.find((lesson) => lesson.id === comment.targetId)?.title || 'Deleted lesson'
+  }
+  return comment.targetId ? `Module ${comment.targetId}` : 'Module'
 }
 
 function CourseCommentsRail({
   scenarioId,
   comments,
   readOnly,
+  isOpen,
+  lessons,
+  activeLessonId,
+  currentUserId,
+  onClose,
+  onOpenLesson,
   onCommentChange,
 }: {
   scenarioId: string
   comments: ScenarioComment[]
   readOnly: boolean
+  isOpen: boolean
+  lessons: CourseLesson[]
+  activeLessonId?: string
+  currentUserId?: string | number
+  onClose: () => void
+  onOpenLesson: (lessonId: string) => void
   onCommentChange: (commentId: string, action: 'create' | 'update') => void
 }) {
   const qc = useQueryClient()
   const [commentBody, setCommentBody] = useState('')
+  const [targetId, setTargetId] = useState(activeLessonId ?? 'course')
+  const [showResolved, setShowResolved] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+
+  useEffect(() => {
+    if (activeLessonId) setTargetId(activeLessonId)
+  }, [activeLessonId])
 
   const createComment = useMutation({
     mutationFn: () => scenariosApi.createComment(scenarioId, {
-      targetType: 'course',
+      targetType: targetId === 'course' ? 'course' : 'lesson',
+      targetId: targetId === 'course' ? undefined : targetId,
       body: commentBody,
     }),
     onSuccess: (response) => {
@@ -1409,21 +1470,63 @@ function CourseCommentsRail({
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Failed to add comment')),
   })
 
+  const updateComment = useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      scenariosApi.updateComment(commentId, { body }),
+    onSuccess: (response) => {
+      const updatedComment = response.data as ScenarioComment
+      setEditingCommentId(null)
+      qc.invalidateQueries({ queryKey: ['scenario-comments', scenarioId] })
+      qc.invalidateQueries({ queryKey: ['scenario-activity', scenarioId] })
+      onCommentChange(updatedComment.id, 'update')
+    },
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Failed to update comment')),
+  })
+
+  const resolveComment = useMutation({
+    mutationFn: (commentId: string) => scenariosApi.resolveComment(scenarioId, commentId),
+    onSuccess: (response) => {
+      const updatedComment = response.data as ScenarioComment
+      qc.invalidateQueries({ queryKey: ['scenario-comments', scenarioId] })
+      qc.invalidateQueries({ queryKey: ['scenario-activity', scenarioId] })
+      onCommentChange(updatedComment.id, 'update')
+    },
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Failed to resolve comment')),
+  })
+
   const openCount = comments.filter((comment) => comment.status === 'open').length
+  const visibleComments = comments.filter((comment) => showResolved ? comment.status === 'resolved' : comment.status === 'open')
+  const activeLesson = lessons.find((lesson) => lesson.id === activeLessonId)
 
   return (
-    <aside className="fixed bottom-0 left-0 top-10 z-20 hidden w-[340px] flex-col border-r border-[var(--lux-line)] bg-[var(--lux-surface)] shadow-[var(--lux-shadow)] lg:flex">
-      <div className="flex h-12 items-center justify-between border-b border-[var(--lux-line)] px-4">
+    <>
+      {isOpen && <button type="button" aria-label="Close comments" onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/35 lg:hidden" />}
+      <aside className={cn(
+        'fixed bottom-0 left-0 top-10 z-50 flex w-full max-w-[380px] flex-col border-r border-[var(--lux-line)] bg-[var(--lux-surface)] shadow-[var(--lux-shadow)] transition-transform duration-200',
+        isOpen ? 'translate-x-0' : '-translate-x-full',
+      )}>
+      <div className="flex h-14 items-center justify-between border-b border-[var(--lux-line)] px-4">
         <div>
           <p className="text-sm font-bold text-[var(--lux-text-strong)]">Comments</p>
-          <p className="text-[11px] text-[var(--lux-muted)]">{openCount} open</p>
+          <p className="text-[11px] text-[var(--lux-muted)]">{openCount} open{activeLesson ? ` · viewing ${activeLesson.title}` : ''}</p>
         </div>
+        <IconButton label="Close comments" onClick={onClose}><X size={16} /></IconButton>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 lux-scrollbar">
         <div className="space-y-4">
           {!readOnly && (
             <div className="rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-3">
+              <label className="mb-2 block text-xs font-semibold text-[var(--lux-muted)]" htmlFor="comment-target">Comment on</label>
+              <select
+                id="comment-target"
+                value={targetId}
+                onChange={(event) => setTargetId(event.target.value)}
+                className="mb-3 w-full rounded-md border border-[var(--lux-line)] bg-[var(--lux-surface)] px-2 py-1.5 text-xs font-semibold text-[var(--lux-text)] outline-none focus:border-[var(--lux-primary)]"
+              >
+                <option value="course">Entire course</option>
+                {lessons.map((lesson, index) => <option key={lesson.id} value={lesson.id}>Lesson {index + 1}: {lesson.title || 'Untitled lesson'}</option>)}
+              </select>
               <textarea
                 value={commentBody}
                 onChange={(event) => setCommentBody(event.target.value)}
@@ -1431,13 +1534,17 @@ function CourseCommentsRail({
                 rows={3}
                 placeholder="Add a course comment..."
               />
-              <Button size="sm" className="mt-2" onClick={() => createComment.mutate()} disabled={!commentBody.trim()} loading={createComment.isPending}>
+              <Button size="sm" className="mt-2" onClick={() => createComment.mutate()} disabled={!commentBody.trim() || createComment.isPending} loading={createComment.isPending}>
                 <MessageCircle size={13} className="mr-1" />
                 Comment
               </Button>
             </div>
           )}
-          {comments.map((comment) => (
+          <div className="flex rounded-md bg-[var(--lux-overlay)] p-0.5 text-xs font-semibold">
+            <button type="button" onClick={() => setShowResolved(false)} className={cn('flex-1 rounded px-2 py-1.5', !showResolved && 'bg-[var(--lux-surface)] text-[var(--lux-text)] shadow-sm')}>Open ({openCount})</button>
+            <button type="button" onClick={() => setShowResolved(true)} className={cn('flex-1 rounded px-2 py-1.5', showResolved && 'bg-[var(--lux-surface)] text-[var(--lux-text)] shadow-sm')}>Resolved</button>
+          </div>
+          {visibleComments.map((comment) => (
             <div key={comment.id} className="rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-3">
               <div className="flex min-w-0 items-center gap-2">
                 <Avatar firstName={comment.author.firstName} lastName={comment.author.lastName} name={collaborationUserName(comment.author)} size="xs" />
@@ -1451,15 +1558,34 @@ function CourseCommentsRail({
                   {comment.status}
                 </span>
               </div>
-              <p className="mt-2 text-[11px] font-semibold uppercase text-[var(--lux-muted-soft)]">{commentTargetLabel(comment)}</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--lux-muted)]">{comment.body}</p>
+              {comment.targetType === 'lesson' && comment.targetId && lessons.some((lesson) => lesson.id === comment.targetId) ? (
+                <button type="button" onClick={() => onOpenLesson(comment.targetId as string)} className="mt-2 text-left text-[11px] font-semibold uppercase text-[var(--lux-primary-muted)] hover:text-[var(--lux-primary)]">
+                  {commentTargetLabel(comment, lessons)}
+                </button>
+              ) : <p className="mt-2 text-[11px] font-semibold uppercase text-[var(--lux-muted-soft)]">{commentTargetLabel(comment, lessons)}</p>}
+              {editingCommentId === comment.id ? (
+                <div className="mt-2">
+                  <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className={textareaClass} rows={3} />
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" onClick={() => updateComment.mutate({ commentId: comment.id, body: editDraft })} disabled={!editDraft.trim()} loading={updateComment.isPending}>Save</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setEditingCommentId(null)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--lux-muted)]">{comment.body}</p>}
               <p className="mt-2 text-[11px] text-[var(--lux-muted-soft)]">{new Date(comment.createdAt).toLocaleString()}</p>
+              {!readOnly && editingCommentId !== comment.id && (
+                <div className="mt-3 flex items-center gap-3">
+                  {String(comment.author.id) === String(currentUserId) && <button type="button" onClick={() => { setEditingCommentId(comment.id); setEditDraft(comment.body) }} className="text-xs font-semibold text-[var(--lux-primary-muted)] hover:text-[var(--lux-primary)]">Edit</button>}
+                  {comment.status === 'open' && <button type="button" onClick={() => resolveComment.mutate(comment.id)} disabled={resolveComment.isPending} className="text-xs font-semibold text-[var(--lux-primary-muted)] hover:text-[var(--lux-primary)]">Resolve</button>}
+                </div>
+              )}
             </div>
           ))}
-          {!comments.length && <p className="py-6 text-center text-sm text-[var(--lux-muted)]">No comments yet.</p>}
+          {!visibleComments.length && <p className="py-6 text-center text-sm text-[var(--lux-muted)]">{showResolved ? 'No resolved comments yet.' : 'No open comments yet.'}</p>}
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }
 
@@ -1470,6 +1596,7 @@ function StructurePage({
   settingsOpen,
   scenarioId,
   readOnly,
+  readiness,
   onUpdateDocument,
   onEditTitle,
   onAddLesson,
@@ -1486,9 +1613,10 @@ function StructurePage({
   settingsOpen: boolean
   scenarioId?: string
   readOnly: boolean
+  readiness: CourseReadiness
   onUpdateDocument: (updater: (document: CourseDocument) => CourseDocument) => void
   onEditTitle: () => void
-  onAddLesson: (title: string, sectionId: string, type?: CourseLesson['type']) => boolean
+  onAddLesson: (title: string, sectionId: string, type?: CourseLesson['type']) => string | null
   onUpdateLesson: (lessonId: string, updater: (lesson: CourseLesson) => CourseLesson) => void
   onRemoveLesson: (lessonId: string) => void
   onOpenLesson: (lessonId: string) => void
@@ -1502,7 +1630,6 @@ function StructurePage({
   >(null)
   const lessons = document.lessons ?? []
   const sections = document.sections ?? []
-  const courseFormat = getCourseFormat(document)
   const lessonsById = new Map(lessons.map((lesson) => [lesson.id, lesson]))
   const courseTitleBackgroundUrl = document.theme?.coverImageUrl ? uploadedAssetUrl(document.theme.coverImageUrl) : ''
 
@@ -1802,8 +1929,9 @@ function StructurePage({
                     <AddLessonInput
                       inputRef={sectionIndex === sections.length - 1 ? lessonInputRef : undefined}
                       sectionId={section.id}
-                      defaultLessonType={courseFormat === 'Assessment-Only' ? 'quiz' : 'lesson'}
+                      defaultLessonType="lesson"
                       onAddLesson={onAddLesson}
+                      onOpenLesson={onOpenLesson}
                     />
                   )}
                 </div>
@@ -2047,9 +2175,6 @@ function CourseHeader({
         <span className="rounded-full bg-[var(--lux-surface-soft)] px-3 py-1.5">
           Duration: {formatCourseDuration(getCourseEstimatedMinutes(document))}
         </span>
-        <span className="rounded-full bg-[var(--lux-surface-soft)] px-3 py-1.5">
-          Format: {String(metadata.format ?? 'Linear')}
-        </span>
         {String(metadata.audience ?? '').trim() && (
           <span className="rounded-full bg-[var(--lux-surface-soft)] px-3 py-1.5">
             Audience: {String(metadata.audience)}
@@ -2077,8 +2202,6 @@ function CourseSetupPanel({
   const metadata = document.metadata ?? {}
   const objectives = document.objectives ?? []
   const settings = document.settings
-  const courseFormat = getCourseFormat(document)
-  const formatDefinition = courseFormatDefinitions[courseFormat]
   const updateDuration = (value: string) => {
     const trimmed = value.trim()
     if (!trimmed) {
@@ -2121,21 +2244,6 @@ function CourseSetupPanel({
             disabled={readOnly}
           />
         </Field>
-        <Field label="Format">
-          <select
-            value={courseFormat}
-            onChange={(event) => onUpdateDocument((current) => applyCourseFormat(current, event.target.value as CourseFormat))}
-            className={selectClass}
-            disabled={readOnly}
-          >
-            {formatOptions.map((format) => <option key={format} value={format}>{format}</option>)}
-          </select>
-          {courseFormatDefinitions[courseFormat] && (
-            <p className="mt-1.5 text-xs text-[var(--lux-muted)]">
-              {courseFormatDefinitions[courseFormat].description} {courseFormatDefinitions[courseFormat].guidance}
-            </p>
-          )}
-        </Field>
         <Field label="Tone">
           <InlineText
             value={String(metadata.tone ?? '')}
@@ -2154,15 +2262,11 @@ function CourseSetupPanel({
               }))
             }
             className={selectClass}
-            disabled={readOnly || courseFormat === 'Assessment-Only'}
-            title={courseFormat === 'Assessment-Only' ? 'Assessment-only courses always use score-based completion.' : undefined}
+            disabled={readOnly}
           >
             <option value="pages">Course progress</option>
             <option value="score">Quiz score</option>
           </select>
-          {courseFormat === 'Assessment-Only' && (
-            <p className="mt-1.5 text-xs text-[var(--lux-muted-soft)]">Locked to quiz score for assessment-only courses.</p>
-          )}
         </Field>
         <Field label="Completion threshold (%)">
           <PercentageInput
@@ -2199,16 +2303,10 @@ function CourseSetupPanel({
                 settings: { ...current.settings, requireQuizPass: event.target.checked },
               }))
             }
-            disabled={readOnly || courseFormat === 'Assessment-Only'}
-            title={courseFormat === 'Assessment-Only' ? 'Assessment-only courses always require a passing quiz score.' : undefined}
+            disabled={readOnly}
           />
           Require quiz pass
         </label>
-      </div>
-      <div className="mt-4 rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] px-3 py-3">
-        <p className="text-sm font-bold text-[var(--lux-text-strong)]">{formatDefinition.label}</p>
-        <p className="mt-1 text-sm leading-6 text-[var(--lux-muted)]">{formatDefinition.description}</p>
-        <p className="mt-2 text-xs font-semibold text-[var(--lux-primary-muted)]">{formatDefinition.guidance}</p>
       </div>
       <div className="mt-5 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--lux-muted-soft)]">Learning objectives</p>
@@ -2549,14 +2647,19 @@ function AddLessonInput({
   sectionId,
   defaultLessonType,
   onAddLesson,
+  onOpenLesson,
 }: {
   inputRef?: RefObject<HTMLInputElement | null>
   sectionId: string
   defaultLessonType: CourseLesson['type']
-  onAddLesson: (title: string, sectionId: string, type?: CourseLesson['type']) => boolean
+  onAddLesson: (title: string, sectionId: string, type?: CourseLesson['type']) => string | null
+  onOpenLesson: (lessonId: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
+  const [lessonType, setLessonType] = useState<CourseLesson['type']>(defaultLessonType)
+
+  useEffect(() => setLessonType(defaultLessonType), [defaultLessonType])
 
   const commit = () => {
     if (!draft.trim()) {
@@ -2564,40 +2667,41 @@ function AddLessonInput({
       inputRef?.current?.focus()
       return
     }
-    if (onAddLesson(draft, sectionId, defaultLessonType)) {
+    const lessonId = onAddLesson(draft, sectionId, lessonType)
+    if (lessonId) {
       setDraft('')
       setError('')
-      window.setTimeout(() => inputRef?.current?.focus(), 30)
+      onOpenLesson(lessonId)
     }
   }
 
   return (
-    <div className="relative py-6">
-      <div className="flex items-center gap-5">
-        <span className="ml-5 text-2xl leading-none text-[var(--lux-muted-soft)]">•</span>
+    <div className="rounded-lg border border-dashed border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-[var(--lux-muted-soft)]">Add course item</p>
+        <div className="flex rounded-md bg-[var(--lux-overlay)] p-0.5 text-xs font-semibold">
+          {(['lesson', 'quiz'] as const).map((type) => (
+            <button key={type} type="button" onClick={() => setLessonType(type)} className={cn('rounded px-2.5 py-1.5 capitalize', lessonType === type && 'bg-[var(--lux-surface)] text-[var(--lux-text)] shadow-sm')}>
+              {type === 'quiz' ? 'Quiz' : 'Lesson'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
         <input
           ref={inputRef}
           value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value)
-            setError('')
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') commit()
-          }}
-          placeholder={defaultLessonType === 'quiz' ? 'Add a quiz title...' : 'Add a lesson title...'}
-          className="min-w-0 flex-1 bg-transparent text-xl font-bold text-[var(--lux-muted)] outline-none placeholder:text-[var(--lux-muted-soft)]"
+          onChange={(event) => { setDraft(event.target.value); setError('') }}
+          onKeyDown={(event) => { if (event.key === 'Enter') commit() }}
+          placeholder={lessonType === 'quiz' ? 'e.g. Module 1 knowledge check' : 'e.g. Understanding the core concept'}
+          className={cn(inputClass, 'min-w-0 flex-1')}
         />
-        <button
-          type="button"
-          onClick={commit}
-          className="hidden h-9 w-9 place-items-center rounded-full bg-[var(--lux-primary)] text-[var(--lux-text-strong)] shadow-sm hover:bg-[var(--lux-primary-hover)] sm:grid"
-          aria-label="Confirm lesson title"
-        >
-          <Check size={15} />
-        </button>
+        <Button size="sm" onClick={commit} disabled={!draft.trim()}>
+          <Plus size={15} />
+          <span className="hidden sm:inline">Add & edit</span>
+        </Button>
       </div>
-      <p className="mt-3 text-right text-xs text-[var(--lux-muted)]">Press Enter to add the {defaultLessonType === 'quiz' ? 'quiz' : 'lesson'}</p>
+      <p className="mt-2 text-xs text-[var(--lux-muted)]">Choose an item type, name it, then continue directly into the editor.</p>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>
   )
@@ -2764,6 +2868,10 @@ function LessonEditor({
   onBack,
   onOpenLesson,
   onUpdateLesson,
+  aiScenarioId,
+  courseDocumentVersion,
+  onAiApplied,
+  onBeforeAiPropose,
 }: {
   document: CourseDocument
   lesson: CourseLesson
@@ -2778,6 +2886,10 @@ function LessonEditor({
   onOpenLesson: (lessonId: string) => void
   onUpdateDocument: (updater: (document: CourseDocument) => CourseDocument) => void
   onUpdateLesson: (updater: (lesson: CourseLesson) => CourseLesson) => void
+  aiScenarioId?: string
+  courseDocumentVersion?: number
+  onAiApplied?: (document: CourseDocument) => void
+  onBeforeAiPropose?: () => Promise<void>
 }) {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
@@ -2909,6 +3021,16 @@ function LessonEditor({
             </>
           )}
           <ThemeToggle compact className="h-9 w-9 rounded-md" />
+          {aiScenarioId && (
+            <AiCourseEditControl
+              scenarioId={aiScenarioId}
+              document={document}
+              scope={{ type: 'lesson', lessonId: lesson.id }}
+              courseDocumentVersion={courseDocumentVersion}
+              onApplied={onAiApplied ?? (() => window.location.reload())}
+              onBeforePropose={onBeforeAiPropose}
+            />
+          )}
         </div>
       </div>
       {lock && readOnly && (
@@ -2997,6 +3119,11 @@ function LessonEditor({
                   <BlockItem
                     block={block}
                     currentLessonId={lesson.id}
+                    document={document}
+                    aiScenarioId={aiScenarioId}
+                    courseDocumentVersion={courseDocumentVersion}
+                    onAiApplied={onAiApplied}
+                    onBeforeAiPropose={onBeforeAiPropose}
                     lessonDestinations={document.lessons ?? []}
                     index={index}
                     total={lesson.blocks.length}
@@ -3929,6 +4056,11 @@ function BlockLibraryRail({
 function BlockItem({
   block,
   currentLessonId,
+  document,
+  aiScenarioId,
+  courseDocumentVersion,
+  onAiApplied,
+  onBeforeAiPropose,
   lessonDestinations,
   index,
   total,
@@ -3944,6 +4076,11 @@ function BlockItem({
 }: {
   block: CourseBlock
   currentLessonId: string
+  document: CourseDocument
+  aiScenarioId?: string
+  courseDocumentVersion?: number
+  onAiApplied?: (document: CourseDocument) => void
+  onBeforeAiPropose?: () => Promise<void>
   lessonDestinations: CourseLesson[]
   index: number
   total: number
@@ -3966,6 +4103,17 @@ function BlockItem({
         <IconButton label="Move up" disabled={index === 0} onClick={onMoveUp}><ChevronDown size={20} className="rotate-180" /></IconButton>
         <IconButton label="Move down" disabled={index === total - 1} onClick={onMoveDown}><ChevronDown size={20} /></IconButton>
         <IconButton label="Duplicate" onClick={onDuplicate}><Copy size={20} /></IconButton>
+        {aiScenarioId && (
+          <AiCourseEditControl
+            scenarioId={aiScenarioId}
+            document={document}
+            scope={{ type: 'block', lessonId: currentLessonId, blockId: block.id }}
+            compact
+            courseDocumentVersion={courseDocumentVersion}
+            onApplied={onAiApplied ?? (() => window.location.reload())}
+            onBeforePropose={onBeforeAiPropose}
+          />
+        )}
         <IconButton label="Delete" onClick={onDelete}><Trash2 size={20} /></IconButton>
       </div>}
 
@@ -4594,6 +4742,21 @@ function InlineBlockSurface({
                       <span className="mt-1 block truncate text-xs text-[var(--lux-muted)]">{block.assetUrl}</span>
                     </span>
                   </a>
+                ) : isVideo && meta('aiGeneratedStoryboard') ? (
+                  <div className="space-y-3 rounded border border-dashed border-[var(--lux-primary)] bg-[var(--lux-primary-soft)] p-5 text-left">
+                    <div className="flex items-center gap-2 font-semibold text-[var(--lux-text-strong)]"><Video size={22} /> AI video storyboard</div>
+                    <p className="text-sm leading-6 text-[var(--lux-text)]">{block.content}</p>
+                    {(block.items ?? []).length > 0 && <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--lux-muted)]">{block.items?.map((item) => <li key={item.id}>{item.title}{item.content ? ` — ${item.content}` : ''}</li>)}</ol>}
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <p className="text-xs text-[var(--lux-muted)]">Upload a video file above, or find one online:</p>
+                      {meta('youtubeSearchUrl') && (
+                        <a href={String(meta('youtubeSearchUrl'))} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">
+                          <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current" aria-hidden><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                          Search YouTube
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="grid min-h-40 place-items-center rounded border border-dashed border-[var(--lux-line)] bg-[var(--lux-surface-soft)] text-center text-sm text-[var(--lux-muted)]">
                     <div>
@@ -5424,8 +5587,8 @@ function pageHasBranchingContent(page: CoursePage): boolean {
 }
 
 function CoursePreview({ document, onClose, onUpdateDocument }: { document: CourseDocument; onClose: () => void; onUpdateDocument: (updater: (document: CourseDocument) => CourseDocument) => void }) {
+  const { user } = useAuth()
   const pages = useMemo(() => document.pages.length ? document.pages : (document.lessons ?? []).map(previewLessonToPage), [document.lessons, document.pages])
-  const courseFormat = getCourseFormat(document)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -5458,7 +5621,6 @@ function CoursePreview({ document, onClose, onUpdateDocument }: { document: Cour
             {document.description?.trim() && (
             <p className="mt-1 max-w-xl truncate text-xs text-[var(--lux-muted)]">{document.description}</p>
             )}
-            <p className="mt-1 text-xs font-semibold text-[var(--lux-primary-muted)]">{courseFormat} course</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-1.5 rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface)] px-2.5 py-1.5" title="Change preview theme">
@@ -5495,19 +5657,19 @@ function CoursePreview({ document, onClose, onUpdateDocument }: { document: Cour
                 const scormManifest = createManifestPreview(courseDocument);
                 const blob = new Blob([scormManifest], { type: 'application/xml' });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
+                const a = window.document.createElement('a');
                 a.href = url;
                 a.download = `${document.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xml`;
-                document.body.appendChild(a);
+                window.document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
+                window.document.body.removeChild(a);
                 URL.revokeObjectURL(url);
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--lux-line)] bg-[var(--lux-primary)] text-[var(--lux-text-strong)] transition-colors hover:bg-[var(--lux-primary-hover)]"
-              title="Download SCORM package"
-              aria-label="Download SCORM package"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--lux-line)] bg-[var(--lux-primary)] px-3 text-xs font-semibold text-[var(--lux-text-strong)] transition-colors hover:bg-[var(--lux-primary-hover)]"
+              title="Download SCORM manifest"
+              aria-label="Download SCORM manifest"
             >
-              <Download size={14} className="mr-1" />
+              <Download size={14} />
               Download
             </button>
             <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-[var(--lux-muted)] hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text-strong)]" aria-label="Close preview">
@@ -5517,7 +5679,7 @@ function CoursePreview({ document, onClose, onUpdateDocument }: { document: Cour
         </div>
         <div
           className={cn(
-            'grid h-[calc(100vh-8rem)] min-h-[520px] grid-rows-[minmax(180px,30vh)_minmax(0,1fr)] overflow-hidden lg:min-h-[620px] lg:grid-rows-1',
+            'grid h-[calc(100vh-8rem)] min-h-[520px] grid-rows-[minmax(140px,22vh)_minmax(0,1fr)] overflow-hidden lg:min-h-[620px] lg:grid-rows-1',
             sidebarCollapsed ? 'lg:grid-cols-[76px_minmax(0,1fr)]' : 'lg:grid-cols-[280px_minmax(0,1fr)]',
           )}
         >
@@ -6388,7 +6550,30 @@ function PreviewMediaBlock({ block, accentColor }: { block: CourseBlock; accentC
     )
   }
 
-  if (block.type === 'video') return displayUrl ? <video controls src={displayUrl} className="w-full rounded-lg" /> : <PreviewEmptyMedia label="Video" />
+  if (block.type === 'video') {
+    if (displayUrl) return <video controls src={displayUrl} className="w-full rounded-lg" />
+    const storyboard = Array.isArray(block.metadata?.aiStoryboard) ? block.metadata.aiStoryboard.filter((item): item is string => typeof item === 'string') : []
+    if (storyboard.length || block.content) {
+      const youtubeUrl = typeof block.metadata?.youtubeSearchUrl === 'string' ? block.metadata.youtubeSearchUrl : null
+      return (
+        <section className="rounded-lg border border-[var(--lux-primary)] bg-[var(--lux-primary-soft)] p-5">
+          <div className="flex items-center gap-2 font-semibold text-[var(--lux-text-strong)]"><Video size={20} /> AI video storyboard</div>
+          <p className="mt-2 text-sm leading-6 text-[var(--lux-text)]">{block.content}</p>
+          {storyboard.length > 0 && <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-[var(--lux-muted)]">{storyboard.map((scene, index) => <li key={`${block.id}-${index}`}>{scene}</li>)}</ol>}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-xs text-[var(--lux-muted)]">Upload a video to replace this storyboard, or find one online:</p>
+            {youtubeUrl && (
+              <a href={youtubeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700">
+                <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current" aria-hidden><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                Search YouTube
+              </a>
+            )}
+          </div>
+        </section>
+      )
+    }
+    return <PreviewEmptyMedia label="Video" />
+  }
   if (block.type === 'audio') return displayUrl ? <audio controls src={displayUrl} className="w-full" /> : <PreviewEmptyMedia label="Audio" />
 
   return (

@@ -15,6 +15,7 @@ import { ScenarioShare } from 'src/scenario-share/scenario-share.entity';
 import { ScenarioActivityLog } from 'src/scenario-share/scenario-activity-log.entity';
 import { ScenarioChangeProposal } from 'src/scenario-share/scenario-change-proposal.entity';
 import { ScenarioComment } from 'src/scenario-share/scenario-comment.entity';
+import { AiChangeSet } from 'src/ai-course/ai-change-set.entity';
 
 export default (configService: ConfigService): TypeOrmModuleOptions => {
   const databaseUrl = configService.get<string>('database.url');
@@ -44,6 +45,7 @@ export default (configService: ConfigService): TypeOrmModuleOptions => {
       ScenarioComment,
       ScenarioActivityLog,
       ScenarioChangeProposal,
+      AiChangeSet,
     ],
     synchronize: !isProduction, // NEVER true in production — use migrations instead
     logging: isProduction ? ['error', 'warn'] : ['query', 'error'],

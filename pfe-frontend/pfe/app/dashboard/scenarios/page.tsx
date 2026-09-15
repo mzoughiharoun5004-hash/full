@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Plus, Search, Film, Edit2, Trash2, Copy, Archive, Send, CheckCircle, XCircle, Eye, Layers } from 'lucide-react'
 import Link from 'next/link'
@@ -119,6 +119,10 @@ export default function ScenariosPage() {
     mutationFn: (id: string) => scenariosApi.delete(id),
     onSuccess: () => {
       toast.success('Scenario deleted')
+      setPage((currentPage) => Math.min(
+        currentPage,
+        Math.max(1, Math.ceil(Math.max(0, total - 1) / itemsPerPage)),
+      ))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
     onError: () => toast.error('Failed to delete scenario'),
@@ -204,12 +208,6 @@ export default function ScenariosPage() {
       console.error(error)
     }
   }
-
-  // Reset page when filters change or the current page runs past the end
-  // (e.g. after a delete) — must be in useEffect to avoid setState during render
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages)
-  }, [page, totalPages])
 
   return (
     <div className="space-y-6 fade-up">

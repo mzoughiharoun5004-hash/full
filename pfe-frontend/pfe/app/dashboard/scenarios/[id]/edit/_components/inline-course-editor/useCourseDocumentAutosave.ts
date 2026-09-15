@@ -35,6 +35,9 @@ export function useCourseDocumentAutosave({
   // conflict (409) is unresolved — i.e. between the conflict dialog opening
   // and the user either reloading or explicitly dismissing it via resetConflict.
   const conflictReloadingRef = useRef(false)
+  const [savedVersion, setSavedVersion] = useState<number>(() =>
+    courseDocumentVersion(baselineDocument ?? document),
+  )
   const versionRef = useRef(courseDocumentVersion(baselineDocument ?? document))
   const onSavedRef = useRef(onSaved)
 
@@ -58,7 +61,9 @@ export function useCourseDocumentAutosave({
     if (!baselineKey || !baselineDocument || baselineInitializedRef.current) return
 
     lastSavedRef.current = JSON.stringify(baselineDocument)
-    versionRef.current = courseDocumentVersion(baselineDocument)
+    const baselineVersion = courseDocumentVersion(baselineDocument)
+    versionRef.current = baselineVersion
+    setSavedVersion(baselineVersion)
     baselineInitializedRef.current = true
   }, [baselineDocument, baselineKey, document])
 
@@ -95,7 +100,9 @@ export function useCourseDocumentAutosave({
         .updateCourseDocument(scenarioId, submittedDocument, versionRef.current)
         .then((response) => {
           lastSavedRef.current = submittedJson
-          versionRef.current = courseDocumentVersion(response.data)
+          const nextVersion = courseDocumentVersion(response.data)
+          versionRef.current = nextVersion
+          setSavedVersion(nextVersion)
           onSavedRef.current?.(response.data)
           return true
         })
@@ -128,6 +135,16 @@ export function useCourseDocumentAutosave({
 
   const resetConflict = useCallback(() => {
     conflictReloadingRef.current = false
+  }, [])
+
+  const syncSavedDocument = useCallback((savedDoc: CourseDocument) => {
+    const nextVersion = courseDocumentVersion(savedDoc)
+    lastSavedRef.current = JSON.stringify(savedDoc)
+    versionRef.current = nextVersion
+    setSavedVersion(nextVersion)
+    latestDocumentRef.current = savedDoc
+    queuedDocumentRef.current = null
+    setStatus('saved')
   }, [])
 
   useEffect(() => {
@@ -171,6 +188,8 @@ export function useCourseDocumentAutosave({
             : 'Saved',
     retry: saveNow,
     resetConflict,
+    savedVersion,
+    syncSavedDocument,
   }
 }
 

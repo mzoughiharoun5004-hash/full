@@ -54,20 +54,20 @@ export default function DashboardPage() {
   // more than 100 scenarios in a given visibility bucket, these counts will
   // undercount. Swap this for a real aggregate/stats endpoint if one is
   // ever added.
-  const { data: platformScenariosData, isLoading: loadingPlatformScenarios } = useQuery({
+  const { data: platformScenariosData, isLoading: loadingPlatformScenarios } = useQuery<Scenario[]>({
     queryKey: ['scenarios-platform-overview'],
     queryFn: () => scenariosApi.getAllAdmin({ limit: 100 }).then((response) => response.data.items),
     enabled: isAdmin,
   })
 
-  const { data: myScenariosData, isLoading: loadingMyScenarios } = useQuery({
+  const { data: myScenariosData, isLoading: loadingMyScenarios } = useQuery<Scenario[]>({
     queryKey: ['scenarios-my-overview', user?.id ?? 'me'],
     queryFn: () => scenariosApi.getAll({ limit: 100 }).then((response) => response.data.items),
     enabled: Boolean(user?.id),
   })
 
-  const myScenarios = myScenariosData ?? []
-  const platformScenarios = isAdmin ? (platformScenariosData ?? []) : myScenarios
+  const myScenarios: Scenario[] = myScenariosData ?? []
+  const platformScenarios: Scenario[] = isAdmin ? (platformScenariosData ?? []) : myScenarios
   const myOwnedScenarios = myScenarios.filter((scenario) => {
     const ownerId = scenario.author?.id ?? scenario.ownerId
     return String(ownerId ?? '') === String(user?.id ?? '')
@@ -324,4 +324,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-

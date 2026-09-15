@@ -438,7 +438,11 @@ export class ScenarioService {
       dto.courseDocument ??
       this.createEmptyCourseDocument(dto.titre, dto.description);
     // Extract enhanced metadata from course document
-    const metadata = courseDocument.metadata ?? {};
+    const metadata = {
+      ...(courseDocument.metadata ?? {}),
+      version: courseDocument.metadata?.version ?? 1,
+    };
+    courseDocument.metadata = metadata;
     const tone = typeof metadata.tone === 'string' ? metadata.tone : undefined;
     const audience =
       typeof metadata.audience === 'string' ? metadata.audience : undefined;
@@ -597,7 +601,7 @@ export class ScenarioService {
 
     if (editableScenario.statut === StatutScenario.EXPORTE) {
       throw new BadRequestException(
-        `Impossible de modifier un scÃ©nario au statut "${editableScenario.statut}". Rejetez-le d'abord.`,
+        `Impossible de modifier un scénario au statut "${editableScenario.statut}". Rejetez-le d'abord.`,
       );
     }
 
@@ -612,7 +616,10 @@ export class ScenarioService {
       ...courseDocument,
       metadata: {
         ...courseDocument.metadata,
-        source: 'course_engine',
+        source:
+          courseDocument.metadata?.source === 'ai_draft'
+            ? 'ai_draft'
+            : 'course_engine',
         version: nextVersion,
       },
     };
@@ -1360,7 +1367,6 @@ export class ScenarioService {
         source: 'course_engine',
         generatedAt: new Date().toISOString(),
         version: 1,
-        format: 'Linear',
       },
     };
   }
@@ -1505,7 +1511,6 @@ export class ScenarioService {
         source: 'legacy_tree',
         generatedAt: new Date().toISOString(),
         version: scenario.courseDocumentVersion ?? 1,
-        format: 'Linear',
       },
     };
   }
