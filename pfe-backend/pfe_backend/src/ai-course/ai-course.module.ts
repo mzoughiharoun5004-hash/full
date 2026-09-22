@@ -6,10 +6,15 @@ import { AiChangeSet } from './ai-change-set.entity';
 import { AiCourseController } from './ai-course.controller';
 import { AiCourseService } from './ai-course.service';
 import { GroqCourseProvider } from './groq-course.provider';
+import { PexelsMediaProvider } from './pexels-media.provider';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AiChangeSet]), AuthModule, ScenarioModule],
+  imports: [
+    TypeOrmModule.forFeature([AiChangeSet]),
+    AuthModule,
+    ScenarioModule,
+  ],
   controllers: [AiCourseController],
-  providers: [AiCourseService, GroqCourseProvider],
+  providers: [AiCourseService, GroqCourseProvider, PexelsMediaProvider],
 })
 export class AiCourseModule {}

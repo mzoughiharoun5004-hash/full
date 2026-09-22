@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,7 +12,7 @@ import { ScenarioActivityLog } from 'src/scenario-share/scenario-activity-log.en
 import { ScenarioComment } from 'src/scenario-share/scenario-comment.entity';
 import { User } from 'src/users/user.entity';
 import { CreateScenarioDto, UpdateScenarioDto } from './dto/scenario.dto';
-import { isApprovedScenarioStatut, StatutScenario } from 'src/common/enums';
+import { StatutScenario } from 'src/common/enums';
 import {
   CourseBlock,
   CourseDocument,
@@ -22,6 +21,10 @@ import {
   CourseSection,
 } from './course-document.types';
 import { ScenarioDocument } from './scenario-document.types';
+import {
+  ScenarioAccessPolicy,
+  ScenarioEditScope,
+} from './scenario-access.policy';
 
 export interface ScenarioNotificationItem {
   id: string;
@@ -51,6 +54,7 @@ export class ScenarioService {
     private readonly activityRepo: Repository<ScenarioActivityLog>,
     @InjectRepository(ScenarioComment)
     private readonly commentRepo: Repository<ScenarioComment>,
+    private readonly accessPolicy: ScenarioAccessPolicy,
   ) {}
 
   // ─── CRUD ────────────────────────────────────────────────────────────────
@@ -366,7 +370,8 @@ export class ScenarioService {
     requesterId: number,
     requesterRole?: string,
   ): Promise<Scenario> {
-    return this.assertCanViewScenario(id, requesterId, requesterRole);
+    await this.assertCanViewScenario(id, requesterId, requesterRole);
+    return this.findOne(id);
   }
 
   async findByUser(userId: number): Promise<Scenario[]> {
@@ -719,7 +724,27 @@ export class ScenarioService {
     scenarioDocument: ScenarioDocument,
     requesterId?: number,
     requesterRole?: string,
+    expectedVersion?: number,
   ): Promise<Scenario> {
+    const editableScenario =
+      requesterId !== undefined
+        ? await this.assertCanEditScenario(
+            id,
+            requesterId,
+            requesterRole,
+            'content',
+          )
+        : await this.findOne(id);
+
+    if (
+      expectedVersion !== undefined &&
+      editableScenario.scenarioDocumentVersion !== expectedVersion
+    ) {
+      throw new ConflictException(
+        'This scenario changed after you opened it. Reload the latest version before saving again.',
+      );
+    }
+
     return this.update(
       id,
       {
@@ -982,70 +1007,16 @@ export class ScenarioService {
     userId: number,
     userRole?: string,
   ): Promise<Scenario> {
-    // This policy is mirrored by the collaboration gateway; keep draft/admin
-    // and share-based access rules aligned when changing either path.
-    const scenario = await this.findOne(id);
-    if (this.isScenarioOwner(scenario, userId)) {
-      return scenario;
-    }
-
-    const share = await this.shareRepo.findOne({
-      where: { scenario: { id }, sharedWith: { id: userId } },
-    });
-    if (share) return scenario;
-
-    if (this.isAdmin(userRole)) {
-      if (scenario.statut === StatutScenario.BROUILLON) {
-        throw new ForbiddenException(
-          'Draft scenarios are only visible to their owner.',
-        );
-      }
-      return scenario;
-    }
-
-    throw new ForbiddenException('You do not have access to this scenario.');
+    return this.accessPolicy.assertCanView(id, userId, userRole);
   }
 
   async assertCanEditScenario(
     id: number,
     userId: number,
     userRole?: string,
-    scope: 'content' | 'structure' | 'publish' = 'content',
+    scope: ScenarioEditScope = 'content',
   ): Promise<Scenario> {
-    // Admins can review but not co-author someone else's scenario. Shared edit
-    // grants are the only non-owner write path.
-    const scenario = await this.findOne(id);
-    if (this.isScenarioOwner(scenario, userId)) return scenario;
-
-    const editableShare = await this.shareRepo.findOne({
-      where: {
-        scenario: { id },
-        sharedWith: { id: userId },
-      },
-    });
-    if (editableShare) {
-      if (!this.shareAllowsScope(editableShare, scope)) {
-        throw new ForbiddenException(
-          'You do not have edit access to this scenario.',
-        );
-      }
-      if (isApprovedScenarioStatut(scenario.statut)) {
-        throw new ForbiddenException(
-          'Approved scenarios are view-only for collaborators.',
-        );
-      }
-      return scenario;
-    }
-
-    if (this.isAdmin(userRole)) {
-      throw new ForbiddenException(
-        'Admins can review scenarios owned by other users, but cannot edit them.',
-      );
-    }
-
-    throw new ForbiddenException(
-      'You do not have edit access to this scenario.',
-    );
+    return this.accessPolicy.assertCanEdit(id, userId, userRole, scope);
   }
 
   private isAdmin(userRole?: string): boolean {
@@ -1076,17 +1047,6 @@ export class ScenarioService {
     if (!value) return null;
     const date = value instanceof Date ? value : new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
-  }
-
-  private shareAllowsScope(
-    share: ScenarioShare,
-    scope: 'content' | 'structure' | 'publish',
-  ): boolean {
-    if (scope === 'publish') return share.canPublish === true;
-    if (scope === 'structure') {
-      return share.permission === 'edit' || share.canEditStructure === true;
-    }
-    return share.permission === 'edit' || share.canEditContent === true;
   }
 
   private exposeOwner(scenario: Scenario): Scenario {

@@ -56,21 +56,34 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
     )
   }
 
-  const scenarioOwnerId = scenario?.author?.id ?? scenario?.ownerId
-  const isOwner = String(scenarioOwnerId ?? '') === String(user?.id ?? '')
+  const scenarioOwnerId =
+    scenario?.author?.id ??
+    scenario?.ownerId ??
+    scenario?.user?.id ??
+    (scenario as { userId?: string | number } | undefined)?.userId
+  const isOwner = scenarioOwnerId != null && String(scenarioOwnerId) === String(user?.id ?? '')
   const hasShare = Boolean(
-    scenario?.shares?.some((share) => String(share.user?.id ?? '') === String(user?.id ?? '')),
+    scenario?.shares?.some((share) => {
+      const shareAny = share as unknown as {
+        user?: { id?: string | number }
+        sharedWith?: { id?: string | number }
+        sharedWithId?: string | number
+      }
+      const shareUserId = shareAny.sharedWith?.id ?? shareAny.sharedWithId ?? shareAny.user?.id
+      return String(shareUserId ?? '') === String(user?.id ?? '')
+    }),
   )
   const hasEditShare = userHasScenarioEditShare(scenario?.shares, user?.id)
+  const scenarioStatus = scenario?.status ?? scenario?.statut
   const canEditScenario = canUserEditScenario({
     isOwner,
     hasEditShare,
-    status: scenario?.status,
+    status: scenarioStatus,
   })
   const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({
     isOwner,
     hasEditShare,
-    status: scenario?.status,
+    status: scenarioStatus,
   })
   const readOnly = Boolean(
     scenario && (viewMode || !canEditScenario),

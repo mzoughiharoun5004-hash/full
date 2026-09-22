@@ -22,8 +22,10 @@ import {
   UpdateScenarioCommentDto,
   UpdateScenarioShareDto,
 } from './dto/scenario-share.dto';
-
-type ScenarioEditScope = 'content' | 'structure' | 'publish' | 'team' | 'any';
+import {
+  ScenarioAccessPolicy,
+  ScenarioEditScope,
+} from 'src/scenario/scenario-access.policy';
 
 interface ActivityLogInput {
   scenarioId: number;
@@ -52,6 +54,7 @@ export class ScenarioShareService {
     @InjectRepository(ScenarioChangeProposal)
     private readonly proposalRepo: Repository<ScenarioChangeProposal>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly accessPolicy: ScenarioAccessPolicy,
   ) {}
 
   /** List all shares for a given scenario */
@@ -466,35 +469,7 @@ export class ScenarioShareService {
     userId: number,
     userRole?: string,
   ): Promise<void> {
-    const scenario = await this.scenarioRepo.findOne({
-      where: { id: scenarioId },
-      relations: ['user'],
-    });
-    if (!scenario) {
-      throw new NotFoundException(`Scenario #${scenarioId} introuvable`);
-    }
-
-    if (Number(scenario.user?.id) === Number(userId)) return;
-
-    const share = await this.shareRepo.findOne({
-      where: { scenario: { id: scenarioId }, sharedWith: { id: userId } },
-      relations: ['scenario', 'sharedWith'],
-    });
-
-    if (share) return;
-
-    if (userRole?.toLowerCase() === 'admin') {
-      if (scenario.statut === StatutScenario.BROUILLON) {
-        throw new ForbiddenException(
-          'Draft scenarios are only visible to their owner.',
-        );
-      }
-      return;
-    }
-
-    if (!share) {
-      throw new ForbiddenException("Vous n'avez pas acces a ce scenario.");
-    }
+    await this.accessPolicy.assertCanView(scenarioId, userId, userRole);
   }
 
   async assertCanEditScenario(
@@ -503,70 +478,7 @@ export class ScenarioShareService {
     userRole?: string,
     scope: ScenarioEditScope = 'content',
   ): Promise<void> {
-    const scenario = await this.scenarioRepo.findOne({
-      where: { id: scenarioId },
-      relations: ['user'],
-    });
-    if (!scenario) {
-      throw new NotFoundException(`Scenario #${scenarioId} introuvable`);
-    }
-
-    if (Number(scenario.user?.id) === Number(userId)) return;
-
-    const share = await this.shareRepo.findOne({
-      where: { scenario: { id: scenarioId }, sharedWith: { id: userId } },
-      relations: ['scenario', 'sharedWith'],
-    });
-
-    if (share) {
-      if (!this.shareAllowsScope(share, scope)) {
-        throw new ForbiddenException(
-          'Vous devez avoir le droit de modification pour cette action.',
-        );
-      }
-      if (isApprovedScenarioStatut(scenario.statut)) {
-        throw new ForbiddenException(
-          'Approved scenarios are view-only for collaborators.',
-        );
-      }
-      return;
-    }
-
-    if (userRole?.toLowerCase() === 'admin') {
-      if (scope === 'publish') return;
-      throw new ForbiddenException(
-        'Admins can review scenarios owned by other users, but cannot edit course team settings.',
-      );
-    }
-
-    if (!share) {
-      throw new ForbiddenException(
-        'Vous devez avoir le droit de modification pour cette action.',
-      );
-    }
-
-    throw new ForbiddenException(
-      'Vous devez avoir le droit de modification pour cette action.',
-    );
-  }
-
-  private shareAllowsScope(
-    share: ScenarioShare,
-    scope: ScenarioEditScope,
-  ): boolean {
-    if (scope === 'team') return false;
-    if (scope === 'any') {
-      return (
-        share.permission === 'edit' ||
-        share.canEditContent === true ||
-        share.canEditStructure === true
-      );
-    }
-    if (scope === 'publish') return share.canPublish === true;
-    if (scope === 'structure') {
-      return share.permission === 'edit' || share.canEditStructure === true;
-    }
-    return share.permission === 'edit' || share.canEditContent === true;
+    await this.accessPolicy.assertCanEdit(scenarioId, userId, userRole, scope);
   }
 
   private fullAccessDefaults(): Required<

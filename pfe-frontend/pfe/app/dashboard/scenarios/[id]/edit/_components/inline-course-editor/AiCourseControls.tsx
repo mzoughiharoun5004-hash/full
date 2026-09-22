@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Bot, Check, LoaderCircle, Sparkles, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Button } from '@/components/ui/Button'
@@ -101,7 +101,7 @@ export function AiCourseEditControl({
   scope: { type: 'course' } | { type: 'lesson'; lessonId: string } | { type: 'block'; lessonId: string; blockId: string }
   onApplied: (document: CourseDocument) => void
   courseDocumentVersion?: number
-  onBeforePropose?: () => Promise<void>
+  onBeforePropose?: () => Promise<{ document: CourseDocument; version: number } | null>
   compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -114,10 +114,14 @@ export function AiCourseEditControl({
     if (!instruction.trim()) return toast.error('Describe the change you want')
     setLoading('propose')
     try {
-      if (onBeforePropose) {
-        await onBeforePropose()
-      }
-      const response = await aiCoursesApi.proposeEdit(scenarioId, { instruction: instruction.trim(), scope, courseDocument: document, expectedVersion })
+      const savedBaseline = onBeforePropose ? await onBeforePropose() : null
+      if (onBeforePropose && !savedBaseline) return
+      const response = await aiCoursesApi.proposeEdit(scenarioId, {
+        instruction: instruction.trim(),
+        scope,
+        courseDocument: savedBaseline?.document ?? document,
+        expectedVersion: savedBaseline?.version ?? expectedVersion,
+      })
       setProposal(response.data)
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Could not get an AI suggestion'))
@@ -153,8 +157,33 @@ export function AiCourseEditControl({
     {open && <div className="fixed inset-0 z-[100] grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Ask AI to edit course content">
       <section className="w-full max-w-xl rounded-xl border border-[var(--lux-line)] bg-[var(--lux-surface)] p-6 shadow-2xl">
         <div className="mb-4 flex items-start justify-between"><div><h2 className="text-lg font-bold">Ask AI</h2><p className="text-sm text-[var(--lux-muted)]">The AI proposes a change. Nothing is saved until you apply it.</p></div><button type="button" onClick={() => !loading && reject()} aria-label="Close"><X size={20} /></button></div>
-        {!proposal ? <><textarea autoFocus className={`${inputClass} min-h-28`} value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Example: simplify this content for beginners and add a practical example." /><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button type="button" onClick={propose} disabled={loading !== null}>{loading ? <LoaderCircle className="mr-2 animate-spin" size={16} /> : <Sparkles className="mr-2" size={16} />}Propose change</Button></div></> : <><div className="rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-4"><p className="font-semibold">Proposed change</p><p className="mt-1 text-sm text-[var(--lux-muted)]">{proposal.proposal.summary || 'AI proposed updates to the selected content.'}</p><p className="mt-3 text-xs font-semibold uppercase tracking-wide text-[var(--lux-muted)]">{proposal.proposal.patches?.length ?? 0} change operation(s)</p><ul className="mt-1 list-disc pl-5 text-sm">{proposal.proposal.patches?.map((patch, index) => <li key={`${patch.op}-${index}`}>{patch.op.replaceAll('_', ' ')}</li>)}</ul></div><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={reject}>Reject</Button><Button type="button" onClick={apply} disabled={loading !== null}>{loading ? <LoaderCircle className="mr-2 animate-spin" size={16} /> : <Check className="mr-2" size={16} />}Apply change</Button></div></>}
+        {!proposal ? <><textarea autoFocus className={`${inputClass} min-h-28`} value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="Example: simplify this content for beginners and add a practical example." /><p className="mt-2 text-xs text-[var(--lux-muted)]">Your latest edits are saved before AI receives the selected content. You can review and reject its proposal.</p><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button type="button" onClick={propose} disabled={loading !== null}>{loading ? <LoaderCircle className="mr-2 animate-spin" size={16} /> : <Sparkles className="mr-2" size={16} />}Propose change</Button></div></> : <><ProposalReview proposal={proposal} /><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={reject}>Reject</Button><Button type="button" onClick={apply} disabled={loading !== null}>{loading ? <LoaderCircle className="mr-2 animate-spin" size={16} /> : <Check className="mr-2" size={16} />}Apply change</Button></div></>}
       </section>
     </div>}
   </>
+}
+
+function ProposalReview({ proposal }: { proposal: AiChangeSet }) {
+  const changes = useMemo(() => (proposal.proposal.patches ?? []).map((patch) => {
+    const details = patch as {
+      block?: { title?: string; content?: string }
+      blocks?: unknown[]
+      lesson?: { title?: string }
+    }
+    if (patch.op === 'replace_block') return `Replace “${details.block?.title || details.block?.content?.slice(0, 70) || 'untitled block'}”`
+    if (patch.op === 'insert_blocks') {
+      const count = details.blocks?.length ?? 0
+      return `Add ${count} block${count === 1 ? '' : 's'}`
+    }
+    if (patch.op === 'remove_block') return 'Remove one block'
+    if (patch.op === 'replace_lesson') return `Replace lesson “${details.lesson?.title ?? 'untitled lesson'}”`
+    if (patch.op === 'insert_lesson') return `Add lesson “${details.lesson?.title ?? 'untitled lesson'}”`
+    return 'Update course details'
+  }), [proposal.proposal.patches])
+
+  return <div className="rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-4">
+    <p className="font-semibold">Review AI proposal</p>
+    <p className="mt-1 text-sm text-[var(--lux-muted)]">{proposal.proposal.summary || 'AI proposed updates to the selected content.'}</p>
+    <ul className="mt-3 space-y-2 text-sm">{changes.map((change, index) => <li key={`${change}-${index}`} className="flex gap-2"><Check className="mt-0.5 shrink-0 text-[var(--lux-primary)]" size={15} />{change}</li>)}</ul>
+  </div>
 }

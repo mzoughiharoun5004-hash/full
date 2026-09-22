@@ -66,6 +66,7 @@ export class ScenarioController {
   }
 
   @Get('my')
+  @SkipThrottle({ short: true, medium: true })
   @ApiOperation({ summary: 'Mes scénarios (enseignant connecté)' })
   findMine(
     @Request() req: AuthenticatedRequest,
@@ -113,6 +114,7 @@ export class ScenarioController {
   }
 
   @Get('notifications')
+  @SkipThrottle({ short: true, medium: true })
   @ApiOperation({ summary: 'Notifications de scénarios du tableau de bord' })
   getNotifications(@Request() req: AuthenticatedRequest) {
     const requester = requesterFrom(req);
@@ -120,6 +122,7 @@ export class ScenarioController {
   }
 
   @Get(':id/course-document')
+  @SkipThrottle({ short: true, medium: true })
   @ApiOperation({ summary: "Document de cours structure d'un scenario" })
   async getCourseDocument(
     @Param('id', ParseIntPipe) id: number,
@@ -153,6 +156,7 @@ export class ScenarioController {
   }
 
   @Get(':id/scenario-document')
+  @SkipThrottle({ short: true, medium: true })
   @ApiOperation({ summary: "Document graph de creation d'un scenario" })
   async getScenarioDocument(
     @Param('id', ParseIntPipe) id: number,
@@ -180,11 +184,13 @@ export class ScenarioController {
       dto.scenarioDocument,
       requester.id,
       requester.role,
+      dto.expectedVersion,
     );
     return scenario.scenarioDocument;
   }
 
   @Get(':id')
+  @SkipThrottle({ short: true, medium: true })
   @ApiOperation({ summary: "Détail d'un scénario" })
   findOne(
     @Param('id', ParseIntPipe) id: number,

@@ -13,6 +13,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
+import { requesterFrom } from 'src/auth/authenticated-request';
 import type { AuthenticatedRequest } from 'src/auth/authenticated-request';
 import { AuthGuard } from 'src/auth/guard/auth.guard';
 import { RoleGuard } from 'src/role/role.guard';
@@ -27,11 +29,23 @@ export class RessourceController {
   constructor(private readonly ressourceService: RessourceService) {}
 
   @Get()
+  @SkipThrottle({ short: true, medium: true })
   findAll(
     @Request() req: AuthenticatedRequest,
     @Query('type') type?: string,
     @Query('search') search?: string,
+    @Query('scenarioId') scenarioId?: string,
   ) {
+    const parsedScenarioId = scenarioId ? parseInt(scenarioId, 10) : undefined;
+    if (parsedScenarioId && !isNaN(parsedScenarioId)) {
+      const requester = requesterFrom(req);
+      return this.ressourceService.findByScenario(
+        parsedScenarioId,
+        requester.id,
+        requester.role,
+        { type, search },
+      );
+    }
     return this.ressourceService.findAll({
       type,
       search,
@@ -40,21 +54,44 @@ export class RessourceController {
   }
 
   @Get('scenario/:scenarioId')
-  findByScenario(@Param('scenarioId', ParseIntPipe) scenarioId: number) {
-    return this.ressourceService.findByScenario(scenarioId);
+  @SkipThrottle({ short: true, medium: true })
+  findByScenario(
+    @Param('scenarioId', ParseIntPipe) scenarioId: number,
+    @Request() req: AuthenticatedRequest,
+    @Query('type') type?: string,
+    @Query('search') search?: string,
+  ) {
+    const requester = requesterFrom(req);
+    return this.ressourceService.findByScenario(
+      scenarioId,
+      requester.id,
+      requester.role,
+      { type, search },
+    );
   }
 
   @Get('module/:moduleId')
-  findByModule(@Param('moduleId', ParseIntPipe) moduleId: number) {
-    return this.ressourceService.findByModule(moduleId);
+  @SkipThrottle({ short: true, medium: true })
+  findByModule(
+    @Param('moduleId', ParseIntPipe) moduleId: number,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const requester = requesterFrom(req);
+    return this.ressourceService.findByModule(
+      moduleId,
+      requester.id,
+      requester.role,
+    );
   }
 
   @Get(':id')
+  @SkipThrottle({ short: true, medium: true })
   findOne(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.ressourceService.findOne(id, this.requesterId(req));
+    const requester = requesterFrom(req);
+    return this.ressourceService.findOne(id, requester.id, requester.role);
   }
 
   @Post()
@@ -62,7 +99,8 @@ export class RessourceController {
     @Body() dto: CreateRessourceDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.ressourceService.create(dto, this.requesterId(req));
+    const requester = requesterFrom(req);
+    return this.ressourceService.create(dto, requester.id, requester.role);
   }
 
   @Put(':id')
@@ -71,7 +109,8 @@ export class RessourceController {
     @Body() dto: UpdateRessourceDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.ressourceService.update(id, dto, this.requesterId(req));
+    const requester = requesterFrom(req);
+    return this.ressourceService.update(id, dto, requester.id, requester.role);
   }
 
   @Delete(':id')
@@ -79,7 +118,8 @@ export class RessourceController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.ressourceService.remove(id, this.requesterId(req));
+    const requester = requesterFrom(req);
+    return this.ressourceService.remove(id, requester.id, requester.role);
   }
 
   private requesterId(req: AuthenticatedRequest): number {

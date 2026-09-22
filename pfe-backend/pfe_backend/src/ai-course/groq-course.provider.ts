@@ -17,6 +17,7 @@ import type {
   AiCourseProvider,
   AiScope,
 } from './ai-course.types';
+import { PexelsMediaProvider } from './pexels-media.provider';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'openai/gpt-oss-20b';
@@ -59,7 +60,14 @@ const requiredAuthoringToolTypes = [
 
 @Injectable()
 export class GroqCourseProvider implements AiCourseProvider {
-  constructor(private readonly config: ConfigService) {}
+  private readonly model: string;
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly pexels: PexelsMediaProvider,
+  ) {
+    this.model = this.config.get<string>('ai.model', MODEL);
+  }
 
   async createOutline(brief: AiCourseBrief): Promise<AiCourseOutline> {
     const result = await this.complete(
@@ -119,7 +127,7 @@ STRUCTURE rules:
       JSON.stringify({ brief, outline }),
       undefined,
     );
-    return this.mapDraft(result, brief);
+    return this.enrichDocumentMedia(this.mapDraft(result, brief));
   }
 
   async proposeEdit(
@@ -144,7 +152,9 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
       JSON.stringify({ instruction, scope, document: scopedDocument }),
       patchSchema,
     );
-    return this.validateProposal(result, scope, document);
+    return this.enrichProposalMedia(
+      this.validateProposal(result, scope, document),
+    );
   }
 
   private async complete(
@@ -170,7 +180,7 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: this.model,
           temperature: 0.3,
           reasoning_effort: 'low',
           messages: [
@@ -180,7 +190,11 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
           response_format: schema
             ? {
                 type: 'json_schema',
-                json_schema: { name: 'ai_course_response', strict: true, schema },
+                json_schema: {
+                  name: 'ai_course_response',
+                  strict: true,
+                  schema,
+                },
               }
             : { type: 'json_object' },
         }),
@@ -191,16 +205,22 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
       };
       if (!response.ok) {
         throw new BadGatewayException(
-          payload.error?.message ?? 'The AI provider could not complete this request.',
+          payload.error?.message ??
+            'The AI provider could not complete this request.',
         );
       }
       const content = payload.choices?.[0]?.message?.content;
-      if (!content) throw new BadGatewayException('The AI provider returned an empty response.');
+      if (!content)
+        throw new BadGatewayException(
+          'The AI provider returned an empty response.',
+        );
       return JSON.parse(content) as unknown;
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new BadGatewayException('The AI provider took too long to respond.');
+        throw new BadGatewayException(
+          'The AI provider took too long to respond.',
+        );
       }
       throw new BadGatewayException('Unable to reach the AI provider.');
     } finally {
@@ -210,19 +230,24 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
 
   private validateOutline(value: unknown): AiCourseOutline {
     const record = object(value);
-    const lessons = array(record.lessons).slice(0, MAX_LESSONS).map((lesson) => {
-      const item = object(lesson);
-      return {
-        title: text(item.title, 160),
-        summary: text(item.summary, 500),
-        estimatedMinutes: integer(item.estimatedMinutes, 1, 120),
-      };
-    });
-    if (lessons.length < 1) throw new BadGatewayException('The AI outline did not contain lessons.');
+    const lessons = array(record.lessons)
+      .slice(0, MAX_LESSONS)
+      .map((lesson) => {
+        const item = object(lesson);
+        return {
+          title: text(item.title, 160),
+          summary: text(item.summary, 500),
+          estimatedMinutes: integer(item.estimatedMinutes, 1, 120),
+        };
+      });
+    if (lessons.length < 1)
+      throw new BadGatewayException('The AI outline did not contain lessons.');
     return {
       title: text(record.title, 180),
       description: text(record.description, 2_000),
-      objectives: array(record.objectives).slice(0, 12).map((item) => text(item, 300)),
+      objectives: array(record.objectives)
+        .slice(0, 12)
+        .map((item) => text(item, 300)),
       estimatedMinutes: integer(record.estimatedMinutes, 5, 480),
       lessons,
     };
@@ -230,29 +255,47 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
 
   private mapDraft(value: unknown, brief: AiCourseBrief): CourseDocument {
     const record = object(value);
-    const lessons = array(record.lessons).filter(isRecord).slice(0, MAX_LESSONS).map((lesson) => {
-      const blocks = array(lesson.blocks).filter(isRecord).slice(0, MAX_BLOCKS_PER_LESSON).map((block) => this.mapBlock(block));
-      if (blocks.length < 2) throw new BadGatewayException('An AI lesson did not contain enough content.');
-      return {
-        id: id('lesson'),
-        type: 'lesson' as const,
-        title: text(lesson.title, 160),
-        summary: optionalText(lesson.summary, 500) ?? text(lesson.title, 160),
-        estimatedMinutes: integer(lesson.estimatedMinutes, 1, 120),
-        blocks,
-      };
-    });
+    const lessons = array(record.lessons)
+      .filter(isRecord)
+      .slice(0, MAX_LESSONS)
+      .map((lesson) => {
+        const blocks = array(lesson.blocks)
+          .filter(isRecord)
+          .slice(0, MAX_BLOCKS_PER_LESSON)
+          .map((block) => this.mapBlock(block));
+        if (blocks.length < 2)
+          throw new BadGatewayException(
+            'An AI lesson did not contain enough content.',
+          );
+        return {
+          id: id('lesson'),
+          type: 'lesson' as const,
+          title: text(lesson.title, 160),
+          summary: optionalText(lesson.summary, 500) ?? text(lesson.title, 160),
+          estimatedMinutes: integer(lesson.estimatedMinutes, 1, 120),
+          blocks,
+        };
+      });
     const title = text(record.title, 180);
-    if (!lessons.length) throw new BadGatewayException('The AI course did not contain lessons.');
+    if (!lessons.length)
+      throw new BadGatewayException('The AI course did not contain lessons.');
     this.ensureAuthoringToolCoverage(lessons, title, array(record.objectives));
     return {
       schemaVersion: 1,
       id: id('course'),
       title,
       description: text(record.description, 2_000),
-      objectives: array(record.objectives).slice(0, 12).map((item) => text(item, 300)),
+      objectives: array(record.objectives)
+        .slice(0, 12)
+        .map((item) => text(item, 300)),
       estimatedMinutes: integer(record.estimatedMinutes, 5, 480),
-      sections: [{ id: id('section'), title: 'Course content', lessonIds: lessons.map((lesson) => lesson.id) }],
+      sections: [
+        {
+          id: id('section'),
+          title: 'Course content',
+          lessonIds: lessons.map((lesson) => lesson.id),
+        },
+      ],
       lessons,
       pages: [],
       settings: {
@@ -268,7 +311,7 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
         source: 'ai_draft',
         generatedAt: new Date().toISOString(),
         generationProvider: 'groq',
-        generationModel: MODEL,
+        generationModel: this.model,
         audience: brief.audience,
         tone: brief.tone ?? '',
         aiGenerated: true,
@@ -279,36 +322,116 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
 
   private mapBlock(value: Record<string, unknown>): CourseBlock {
     const type = text(value.type, 64);
-    if (!allowedBlockTypes.includes(type as (typeof allowedBlockTypes)[number])) {
-      throw new BadGatewayException(`The AI returned unsupported block type "${type}".`);
+    if (
+      !allowedBlockTypes.includes(type as (typeof allowedBlockTypes)[number])
+    ) {
+      throw new BadGatewayException(
+        `The AI returned unsupported block type "${type}".`,
+      );
     }
     const items = array(value.items)
       .filter(isRecord)
       .filter((item) => Boolean(optionalText(item.title, 180)))
       .slice(0, 12)
       .map((source) => {
-      return {
-        id: id('item'),
-        title: text(source.title, 180),
-        content: optionalText(source.content, 2_000),
-        match: optionalText(source.match, 180),
-      };
-    });
+        return {
+          id: id('item'),
+          title: text(source.title, 180),
+          content: optionalText(source.content, 2_000),
+          match: optionalText(source.match, 180),
+        };
+      });
     const derivedContent = items
       .map((item) => [item.title, item.content].filter(Boolean).join(': '))
       .filter(Boolean)
       .join('\n');
     const blockType = type as CourseBlock['type'];
-    const content = optionalText(value.content, 6_000) ?? (derivedContent || 'Review this learning activity.');
+    const content =
+      optionalText(value.content, 6_000) ??
+      (derivedContent || 'Review this learning activity.');
     return {
       id: id('block'),
       type: blockType,
       title: optionalText(value.title, 180),
       content,
       items,
-      assetUrl: this.generatedAssetUrl(blockType, optionalText(value.title, 180), content),
-      metadata: this.defaultBlockMetadata(blockType, optionalText(value.title, 180), content, items),
+      assetUrl: this.generatedAssetUrl(
+        blockType,
+        optionalText(value.title, 180),
+        content,
+      ),
+      metadata: this.defaultBlockMetadata(
+        blockType,
+        optionalText(value.title, 180),
+        content,
+        items,
+      ),
     };
+  }
+
+  private async enrichDocumentMedia(
+    document: CourseDocument,
+  ): Promise<CourseDocument> {
+    return {
+      ...document,
+      lessons: await Promise.all(
+        (document.lessons ?? []).map(async (lesson) => ({
+          ...lesson,
+          blocks: await Promise.all(
+            lesson.blocks.map((block) => this.enrichBlockMedia(block)),
+          ),
+        })),
+      ),
+    };
+  }
+
+  private async enrichProposalMedia(
+    proposal: AiCourseProposal,
+  ): Promise<AiCourseProposal> {
+    return {
+      ...proposal,
+      patches: await Promise.all(
+        proposal.patches.map(async (patch) => {
+          if (patch.op === 'replace_block')
+            return {
+              ...patch,
+              block: await this.enrichBlockMedia(patch.block),
+            };
+          if (patch.op === 'insert_blocks')
+            return {
+              ...patch,
+              blocks: await Promise.all(
+                patch.blocks.map((block) => this.enrichBlockMedia(block)),
+              ),
+            };
+          if (patch.op === 'replace_lesson' || patch.op === 'insert_lesson') {
+            return {
+              ...patch,
+              lesson: {
+                ...patch.lesson,
+                blocks: await Promise.all(
+                  patch.lesson.blocks.map((block) =>
+                    this.enrichBlockMedia(block),
+                  ),
+                ),
+              },
+            };
+          }
+          return patch;
+        }),
+      ),
+    };
+  }
+
+  private async enrichBlockMedia(block: CourseBlock): Promise<CourseBlock> {
+    const pexelsAsset = await this.pexels.findForBlock(block);
+    return pexelsAsset
+      ? {
+          ...block,
+          assetUrl: pexelsAsset.assetUrl,
+          metadata: { ...block.metadata, ...pexelsAsset.metadata },
+        }
+      : block;
   }
 
   private ensureAuthoringToolCoverage(
@@ -318,30 +441,71 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
   ): void {
     const objectives = rawObjectives
       .slice(0, 4)
-      .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      .filter(
+        (item): item is string =>
+          typeof item === 'string' && Boolean(item.trim()),
+      )
       .map((item) => item.trim());
-    const present = new Set(lessons.flatMap((lesson) => lesson.blocks.map((block) => block.type)));
+    const present = new Set(
+      lessons.flatMap((lesson) => lesson.blocks.map((block) => block.type)),
+    );
     let targetIndex = 0;
     for (const type of requiredAuthoringToolTypes) {
       if (present.has(type)) continue;
       const lesson = lessons[targetIndex++ % lessons.length];
-      lesson.blocks.splice(Math.max(lesson.blocks.length - 1, 0), 0, this.fallbackToolBlock(type, title, objectives));
+      this.insertBlock(lesson, this.fallbackToolBlock(type, title, objectives));
     }
     for (const lesson of lessons) {
       for (const block of lesson.blocks) {
         if (block.type !== 'video' || (block.items?.length ?? 0) >= 2) continue;
-        const fallback = this.fallbackToolBlock('video', lesson.title, objectives);
+        const fallback = this.fallbackToolBlock(
+          'video',
+          lesson.title,
+          objectives,
+        );
         block.content = block.content || fallback.content;
         block.items = fallback.items;
-        block.metadata = this.defaultBlockMetadata('video', block.title, block.content ?? '', block.items);
+        block.metadata = this.defaultBlockMetadata(
+          'video',
+          block.title,
+          block.content ?? '',
+          block.items,
+        );
       }
       if (!lesson.blocks.some((block) => block.type === 'lesson_summary')) {
-        lesson.blocks.push(this.fallbackToolBlock('lesson_summary', lesson.title, objectives));
+        this.insertBlock(
+          lesson,
+          this.fallbackToolBlock('lesson_summary', lesson.title, objectives),
+        );
       }
       if (!lesson.blocks.some((block) => block.type === 'continue_button')) {
-        lesson.blocks.push(this.fallbackToolBlock('continue_button', lesson.title, objectives));
+        this.insertBlock(
+          lesson,
+          this.fallbackToolBlock('continue_button', lesson.title, objectives),
+        );
       }
     }
+  }
+
+  private insertBlock(lesson: CourseLesson, block: CourseBlock): void {
+    if (lesson.blocks.length >= MAX_BLOCKS_PER_LESSON) {
+      const removableIndex = lesson.blocks.findIndex(
+        (candidate) =>
+          candidate.type !== 'lesson_summary' &&
+          candidate.type !== 'continue_button',
+      );
+      if (removableIndex >= 0) lesson.blocks.splice(removableIndex, 1);
+    }
+    const endIndex = lesson.blocks.findIndex(
+      (candidate) =>
+        candidate.type === 'lesson_summary' ||
+        candidate.type === 'continue_button',
+    );
+    lesson.blocks.splice(
+      endIndex < 0 ? lesson.blocks.length : endIndex,
+      0,
+      block,
+    );
   }
 
   private fallbackToolBlock(
@@ -350,19 +514,76 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
     objectives: string[],
   ): CourseBlock {
     const focus = objectives[0] ?? `apply ${topic}`;
-    const itemRows = objectives.length >= 2 ? objectives : [`Understand ${topic}`, ...objectives, `Practise ${topic}`];
-    const common = { type, title: topic, content: `Explore ${topic} through this activity.`, items: itemRows.map((item, index) => ({ title: item, content: `Use this to ${item.toLowerCase()}.`, match: index % 2 ? 'Review' : 'Apply' })) };
-    const templates: Partial<Record<(typeof allowedBlockTypes)[number], Record<string, unknown>>> = {
-      text: { ...common, title: `Introduction to ${topic}`, content: `This lesson introduces ${topic} and prepares you to ${focus}.`, items: [] },
-      list: { ...common, title: `Key points for ${topic}`, content: 'Use these points as a practical reference.' },
-      image: { ...common, title: `Visual: ${topic}`, content: topic.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim() || 'education learning', items: [] },
+    const itemRows =
+      objectives.length >= 2
+        ? objectives
+        : [`Understand ${topic}`, ...objectives, `Practise ${topic}`];
+    const common = {
+      type,
+      title: topic,
+      content: `Explore ${topic} through this activity.`,
+      items: itemRows.map((item, index) => ({
+        title: item,
+        content: `Use this to ${item.toLowerCase()}.`,
+        match: index % 2 ? 'Review' : 'Apply',
+      })),
+    };
+    const templates: Partial<
+      Record<(typeof allowedBlockTypes)[number], Record<string, unknown>>
+    > = {
+      text: {
+        ...common,
+        title: `Introduction to ${topic}`,
+        content: `This lesson introduces ${topic} and prepares you to ${focus}.`,
+        items: [],
+      },
+      list: {
+        ...common,
+        title: `Key points for ${topic}`,
+        content: 'Use these points as a practical reference.',
+      },
+      image: {
+        ...common,
+        title: `Visual: ${topic}`,
+        content:
+          topic
+            .toLowerCase()
+            .replace(/[^a-z0-9 ]/g, '')
+            .trim() || 'education learning',
+        items: [],
+      },
 
-      video: { ...common, title: `Suggested video: ${topic}`, content: `Attach a short demonstration video showing ${focus}.` },
-      process_steps: { ...common, title: `Apply ${topic}`, content: 'Work through these steps in order.' },
-      flashcards: { ...common, title: `Recall ${topic}`, content: 'Flip each card and explain the idea in your own words.' },
-      sorting_activity: { ...common, title: `Sort the ${topic} decisions`, content: 'Sort each item into the best category.' },
-      lesson_summary: { ...common, title: 'Lesson recap', content: 'Review these takeaways before continuing.' },
-      continue_button: { ...common, title: 'Continue', content: 'Continue', items: [] },
+      video: {
+        ...common,
+        title: `Suggested video: ${topic}`,
+        content: `Attach a short demonstration video showing ${focus}.`,
+      },
+      process_steps: {
+        ...common,
+        title: `Apply ${topic}`,
+        content: 'Work through these steps in order.',
+      },
+      flashcards: {
+        ...common,
+        title: `Recall ${topic}`,
+        content: 'Flip each card and explain the idea in your own words.',
+      },
+      sorting_activity: {
+        ...common,
+        title: `Sort the ${topic} decisions`,
+        content: 'Sort each item into the best category.',
+      },
+      lesson_summary: {
+        ...common,
+        title: 'Lesson recap',
+        content: 'Review these takeaways before continuing.',
+      },
+      continue_button: {
+        ...common,
+        title: 'Continue',
+        content: 'Continue',
+        items: [],
+      },
     };
     return this.mapBlock(templates[type] ?? common);
   }
@@ -374,18 +595,58 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
     items: CourseBlock['items'],
   ): Record<string, unknown> | undefined {
     if (type === 'image') {
-      return { alt: title ?? 'Course image', caption: title ?? '', imageSearchQuery: content, webImage: true };
+      return {
+        alt: title ?? 'Course image',
+        caption: title ?? '',
+        imageSearchQuery: content,
+        webImage: true,
+      };
     }
     if (type === 'video') {
-      const keywords = content.replace(/[^\w\s]/g, ' ').trim().slice(0, 80);
+      const keywords = content
+        .replace(/[^\w\s]/g, ' ')
+        .trim()
+        .slice(0, 80);
       const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(keywords)}`;
-      const storyboard = (items ?? []).map((item) => `${item.title}${item.content ? `: ${item.content}` : ''}`);
-      return { autoplay: false, caption: title ?? '', transcript: content, aiStoryboard: storyboard, aiGeneratedStoryboard: true, youtubeSearchUrl };
+      const storyboard = (items ?? []).map(
+        (item) => `${item.title}${item.content ? `: ${item.content}` : ''}`,
+      );
+      return {
+        autoplay: false,
+        caption: title ?? '',
+        transcript: content,
+        aiStoryboard: storyboard,
+        aiGeneratedStoryboard: true,
+        youtubeSearchUrl,
+      };
     }
-    if (type === 'process_steps') return { introTitle: title ?? 'Process overview', introText: content, startLabel: 'Start', summaryTitle: 'Process complete', restartLabel: 'Start again' };
-    if (type === 'flashcards') return { layout: 'grid', clickPrompt: 'Click to flip', imageSide: 'front' };
-    if (type === 'sorting_activity') return { graded: false, instructions: 'Sort each item into the correct category.', completionMessage: 'All items sorted.' };
-    if (type === 'continue_button') return { label: 'Continue', alignment: 'center', completionType: 'None', unlockedHint: 'Ready to continue.' };
+    if (type === 'process_steps')
+      return {
+        introTitle: title ?? 'Process overview',
+        introText: content,
+        startLabel: 'Start',
+        summaryTitle: 'Process complete',
+        restartLabel: 'Start again',
+      };
+    if (type === 'flashcards')
+      return {
+        layout: 'grid',
+        clickPrompt: 'Click to flip',
+        imageSide: 'front',
+      };
+    if (type === 'sorting_activity')
+      return {
+        graded: false,
+        instructions: 'Sort each item into the correct category.',
+        completionMessage: 'All items sorted.',
+      };
+    if (type === 'continue_button')
+      return {
+        label: 'Continue',
+        alignment: 'center',
+        completionType: 'None',
+        unlockedHint: 'Ready to continue.',
+      };
     return undefined;
   }
 
@@ -422,13 +683,19 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
     document: CourseDocument,
   ): AiCourseProposal {
     const record = object(value);
-    const patches = array(record.patches).slice(0, 12).map((patch) => this.mapPatch(object(patch), document));
-    if (!patches.length) throw new BadGatewayException('The AI did not propose a usable edit.');
+    const patches = array(record.patches)
+      .slice(0, 12)
+      .map((patch) => this.mapPatch(object(patch), document));
+    if (!patches.length)
+      throw new BadGatewayException('The AI did not propose a usable edit.');
     this.assertScopedPatches(patches, scope);
     return { summary: text(record.summary, 800), patches };
   }
 
-  private mapPatch(value: Record<string, unknown>, document: CourseDocument): AiCourseProposal['patches'][number] {
+  private mapPatch(
+    value: Record<string, unknown>,
+    document: CourseDocument,
+  ): AiCourseProposal['patches'][number] {
     const op = text(value.op, 64);
     if (op === 'update_metadata') {
       const changes = object(value.changes);
@@ -436,16 +703,27 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
         op,
         changes: {
           title: optionalText(changes.title, 180) ?? document.title,
-          description: optionalText(changes.description, 2_000) ?? document.description,
-          objectives: Array.isArray(changes.objectives) ? changes.objectives.slice(0, 12).map((item) => text(item, 300)) : document.objectives,
-          estimatedMinutes: changes.estimatedMinutes == null ? document.estimatedMinutes : integer(changes.estimatedMinutes, 5, 480),
+          description:
+            optionalText(changes.description, 2_000) ?? document.description,
+          objectives: Array.isArray(changes.objectives)
+            ? changes.objectives.slice(0, 12).map((item) => text(item, 300))
+            : document.objectives,
+          estimatedMinutes:
+            changes.estimatedMinutes == null
+              ? document.estimatedMinutes
+              : integer(changes.estimatedMinutes, 5, 480),
         },
       };
     }
     if (op === 'insert_lesson') {
       const afterLessonId = optionalText(value.afterLessonId, 120);
-      if (afterLessonId && !(document.lessons ?? []).some((item) => item.id === afterLessonId)) {
-        throw new BadGatewayException('The AI referenced a lesson insertion point that no longer exists.');
+      if (
+        afterLessonId &&
+        !(document.lessons ?? []).some((item) => item.id === afterLessonId)
+      ) {
+        throw new BadGatewayException(
+          'The AI referenced a lesson insertion point that no longer exists.',
+        );
       }
       const content = object(value.lesson);
       return {
@@ -457,17 +735,27 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
           title: text(content.title, 160),
           summary: optionalText(content.summary, 500),
           estimatedMinutes: integer(content.estimatedMinutes, 1, 120),
-          blocks: array(content.blocks).slice(0, MAX_BLOCKS_PER_LESSON).map((item) => this.mapBlock(object(item))),
+          blocks: array(content.blocks)
+            .slice(0, MAX_BLOCKS_PER_LESSON)
+            .map((item) => this.mapBlock(object(item))),
         },
       };
     }
     const lessonId = text(value.lessonId, 120);
-    const lesson = (document.lessons ?? []).find((item) => item.id === lessonId);
-    if (!lesson) throw new BadGatewayException('The AI referenced a lesson that no longer exists.');
+    const lesson = (document.lessons ?? []).find(
+      (item) => item.id === lessonId,
+    );
+    if (!lesson)
+      throw new BadGatewayException(
+        'The AI referenced a lesson that no longer exists.',
+      );
     if (op === 'replace_block') {
       const blockId = text(value.blockId, 120);
       const existing = lesson.blocks.find((block) => block.id === blockId);
-      if (!existing) throw new BadGatewayException('The AI referenced a block that no longer exists.');
+      if (!existing)
+        throw new BadGatewayException(
+          'The AI referenced a block that no longer exists.',
+        );
       const mapped = this.mapBlock(object(value.block));
       return {
         op,
@@ -476,7 +764,9 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
         block: {
           ...mapped,
           id: blockId,
-          assetUrl: mapped.assetUrl ?? (mapped.type === existing.type ? existing.assetUrl : undefined),
+          assetUrl:
+            mapped.assetUrl ??
+            (mapped.type === existing.type ? existing.assetUrl : undefined),
           metadata: {
             ...(mapped.type === existing.type ? existing.metadata : {}),
             ...mapped.metadata,
@@ -487,15 +777,30 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
     if (op === 'remove_block') {
       const blockId = text(value.blockId, 120);
       const existing = lesson.blocks.find((block) => block.id === blockId);
-      if (!existing) throw new BadGatewayException('The AI referenced a block that no longer exists.');
+      if (!existing)
+        throw new BadGatewayException(
+          'The AI referenced a block that no longer exists.',
+        );
       return { op, lessonId, blockId };
     }
     if (op === 'insert_blocks') {
       const afterBlockId = optionalText(value.afterBlockId, 120);
-      if (afterBlockId && !lesson.blocks.some((block) => block.id === afterBlockId)) {
-        throw new BadGatewayException('The AI referenced an insertion point that no longer exists.');
+      if (
+        afterBlockId &&
+        !lesson.blocks.some((block) => block.id === afterBlockId)
+      ) {
+        throw new BadGatewayException(
+          'The AI referenced an insertion point that no longer exists.',
+        );
       }
-      return { op, lessonId, afterBlockId, blocks: array(value.blocks).slice(0, 6).map((item) => this.mapBlock(object(item))) };
+      return {
+        op,
+        lessonId,
+        afterBlockId,
+        blocks: array(value.blocks)
+          .slice(0, 6)
+          .map((item) => this.mapBlock(object(item))),
+      };
     }
     if (op === 'replace_lesson') {
       const content = object(value.lesson);
@@ -506,12 +811,19 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
           ...lesson,
           title: optionalText(content.title, 160) ?? lesson.title,
           summary: optionalText(content.summary, 500) ?? lesson.summary,
-          estimatedMinutes: content.estimatedMinutes === undefined ? lesson.estimatedMinutes : integer(content.estimatedMinutes, 1, 120),
-          blocks: array(content.blocks).slice(0, MAX_BLOCKS_PER_LESSON).map((item) => this.mapBlock(object(item))),
+          estimatedMinutes:
+            content.estimatedMinutes === undefined
+              ? lesson.estimatedMinutes
+              : integer(content.estimatedMinutes, 1, 120),
+          blocks: array(content.blocks)
+            .slice(0, MAX_BLOCKS_PER_LESSON)
+            .map((item) => this.mapBlock(object(item))),
         },
       };
     }
-    throw new BadGatewayException(`The AI returned unsupported patch operation "${op}".`);
+    throw new BadGatewayException(
+      `The AI returned unsupported patch operation "${op}".`,
+    );
   }
 
   private assertScopedPatches(
@@ -520,42 +832,77 @@ Return only operations permitted by the schema. Preserve existing IDs where refe
   ): void {
     if (scope.type === 'course') return;
     for (const patch of patches) {
-      if (patch.op === 'update_metadata') throw new BadGatewayException('The proposed edit exceeds the selected scope.');
+      if (patch.op === 'update_metadata')
+        throw new BadGatewayException(
+          'The proposed edit exceeds the selected scope.',
+        );
       if (patch.op === 'insert_lesson') {
-        throw new BadGatewayException('The proposed edit exceeds the selected scope.');
+        throw new BadGatewayException(
+          'The proposed edit exceeds the selected scope.',
+        );
       }
-      if (patch.lessonId !== scope.lessonId) throw new BadGatewayException('The proposed edit exceeds the selected lesson.');
-      if (scope.type === 'block' && patch.op !== 'replace_block' && patch.op !== 'remove_block') {
-        throw new BadGatewayException('The proposed edit exceeds the selected block.');
+      if (patch.lessonId !== scope.lessonId)
+        throw new BadGatewayException(
+          'The proposed edit exceeds the selected lesson.',
+        );
+      if (
+        scope.type === 'block' &&
+        patch.op !== 'replace_block' &&
+        patch.op !== 'remove_block'
+      ) {
+        throw new BadGatewayException(
+          'The proposed edit exceeds the selected block.',
+        );
       }
-      if (scope.type === 'block' && (patch.op === 'replace_block' || patch.op === 'remove_block') && patch.blockId !== scope.blockId) {
-        throw new BadGatewayException('The proposed edit exceeds the selected block.');
+      if (
+        scope.type === 'block' &&
+        (patch.op === 'replace_block' || patch.op === 'remove_block') &&
+        patch.blockId !== scope.blockId
+      ) {
+        throw new BadGatewayException(
+          'The proposed edit exceeds the selected block.',
+        );
       }
     }
   }
 
-  private scopeDocument(document: CourseDocument, scope: AiScope): CourseDocument {
+  private scopeDocument(
+    document: CourseDocument,
+    scope: AiScope,
+  ): CourseDocument {
     if (scope.type === 'course') return document;
-    const lesson = (document.lessons ?? []).find((item) => item.id === scope.lessonId);
-    if (!lesson) throw new BadGatewayException('The selected lesson no longer exists.');
-    const scopedLesson = scope.type === 'block'
-      ? { ...lesson, blocks: lesson.blocks.filter((block) => block.id === scope.blockId) }
-      : lesson;
+    const lesson = (document.lessons ?? []).find(
+      (item) => item.id === scope.lessonId,
+    );
+    if (!lesson)
+      throw new BadGatewayException('The selected lesson no longer exists.');
+    const scopedLesson =
+      scope.type === 'block'
+        ? {
+            ...lesson,
+            blocks: lesson.blocks.filter((block) => block.id === scope.blockId),
+          }
+        : lesson;
     if (scope.type === 'block' && !scopedLesson.blocks.length) {
       throw new BadGatewayException('The selected block no longer exists.');
     }
     return { ...document, lessons: [scopedLesson], pages: [] };
   }
 
-  private allowedTone(value?: string): CourseDocument['settings']['tone'] | undefined {
-    return ['friendly', 'formal', 'playful', 'authoritative'].includes(value ?? '')
+  private allowedTone(
+    value?: string,
+  ): CourseDocument['settings']['tone'] | undefined {
+    return ['friendly', 'formal', 'playful', 'authoritative'].includes(
+      value ?? '',
+    )
       ? (value as CourseDocument['settings']['tone'])
       : undefined;
   }
 }
 
 function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BadGatewayException('The AI returned an invalid response shape.');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new BadGatewayException('The AI returned an invalid response shape.');
   return value as Record<string, unknown>;
 }
 
@@ -568,17 +915,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function text(value: unknown, maxLength: number): string {
-  if (typeof value !== 'string' || !value.trim()) throw new BadGatewayException('The AI returned required empty content.');
+  if (typeof value !== 'string' || !value.trim())
+    throw new BadGatewayException('The AI returned required empty content.');
   return value.trim().slice(0, maxLength);
 }
 
 function optionalText(value: unknown, maxLength: number): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim().slice(0, maxLength) : undefined;
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, maxLength)
+    : undefined;
 }
 
 function integer(value: unknown, min: number, max: number): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw new BadGatewayException('The AI returned an invalid numeric value.');
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max)
+    throw new BadGatewayException('The AI returned an invalid numeric value.');
   return parsed;
 }
 
@@ -594,49 +945,177 @@ function courseVisualSvg(title: string, description: string): string {
 }
 
 function escapeXml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] ?? character);
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&apos;',
+      })[character] ?? character,
+  );
 }
 
 const blockSchema = {
-  type: 'object', additionalProperties: false,
+  type: 'object',
+  additionalProperties: false,
   properties: {
     type: { type: 'string', enum: allowedBlockTypes },
     title: { type: ['string', 'null'] },
     content: { type: ['string', 'null'] },
-    items: { type: ['array', 'null'], items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, content: { type: ['string', 'null'] } }, required: ['title', 'content'] } },
-  }, required: ['type', 'title', 'content', 'items'],
+    items: {
+      type: ['array', 'null'],
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          content: { type: ['string', 'null'] },
+          match: { type: ['string', 'null'] },
+        },
+        required: ['title', 'content', 'match'],
+      },
+    },
+  },
+  required: ['type', 'title', 'content', 'items'],
 };
 
 const outlineSchema = {
-  type: 'object', additionalProperties: false,
+  type: 'object',
+  additionalProperties: false,
   properties: {
-    title: { type: 'string' }, description: { type: 'string' }, objectives: { type: 'array', items: { type: 'string' } }, estimatedMinutes: { type: 'integer' },
-    lessons: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, summary: { type: 'string' }, estimatedMinutes: { type: 'integer' } }, required: ['title', 'summary', 'estimatedMinutes'] } },
-  }, required: ['title', 'description', 'objectives', 'estimatedMinutes', 'lessons'],
+    title: { type: 'string' },
+    description: { type: 'string' },
+    objectives: { type: 'array', items: { type: 'string' } },
+    estimatedMinutes: { type: 'integer' },
+    lessons: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          summary: { type: 'string' },
+          estimatedMinutes: { type: 'integer' },
+        },
+        required: ['title', 'summary', 'estimatedMinutes'],
+      },
+    },
+  },
+  required: [
+    'title',
+    'description',
+    'objectives',
+    'estimatedMinutes',
+    'lessons',
+  ],
 };
 
 const patchLessonSchema = {
-  type: 'object', additionalProperties: false,
-  properties: { title: { type: 'string' }, summary: { type: ['string', 'null'] }, estimatedMinutes: { type: 'integer' }, blocks: { type: 'array', items: blockSchema } },
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string' },
+    summary: { type: ['string', 'null'] },
+    estimatedMinutes: { type: 'integer' },
+    blocks: { type: 'array', items: blockSchema },
+  },
   required: ['title', 'summary', 'estimatedMinutes', 'blocks'],
 };
 
 const patchSchema = {
-  type: 'object', additionalProperties: false,
+  type: 'object',
+  additionalProperties: false,
   properties: {
     summary: { type: 'string' },
     patches: {
       type: 'array',
       items: {
         anyOf: [
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'replace_block' }, lessonId: { type: 'string' }, blockId: { type: 'string' }, block: blockSchema }, required: ['op', 'lessonId', 'blockId', 'block'] },
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'remove_block' }, lessonId: { type: 'string' }, blockId: { type: 'string' } }, required: ['op', 'lessonId', 'blockId'] },
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'insert_blocks' }, lessonId: { type: 'string' }, afterBlockId: { type: ['string', 'null'] }, blocks: { type: 'array', items: blockSchema } }, required: ['op', 'lessonId', 'afterBlockId', 'blocks'] },
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'replace_lesson' }, lessonId: { type: 'string' }, lesson: patchLessonSchema }, required: ['op', 'lessonId', 'lesson'] },
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'insert_lesson' }, afterLessonId: { type: ['string', 'null'] }, lesson: patchLessonSchema }, required: ['op', 'afterLessonId', 'lesson'] },
-          { type: 'object', additionalProperties: false, properties: { op: { const: 'update_metadata' }, changes: { type: 'object', additionalProperties: false, properties: { title: { type: ['string', 'null'] }, description: { type: ['string', 'null'] }, objectives: { type: ['array', 'null'], items: { type: 'string' } }, estimatedMinutes: { type: ['integer', 'null'] } }, required: ['title', 'description', 'objectives', 'estimatedMinutes'] } }, required: ['op', 'changes'] },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'replace_block' },
+              lessonId: { type: 'string' },
+              blockId: { type: 'string' },
+              block: blockSchema,
+            },
+            required: ['op', 'lessonId', 'blockId', 'block'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'remove_block' },
+              lessonId: { type: 'string' },
+              blockId: { type: 'string' },
+            },
+            required: ['op', 'lessonId', 'blockId'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'insert_blocks' },
+              lessonId: { type: 'string' },
+              afterBlockId: { type: ['string', 'null'] },
+              blocks: { type: 'array', items: blockSchema },
+            },
+            required: ['op', 'lessonId', 'afterBlockId', 'blocks'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'replace_lesson' },
+              lessonId: { type: 'string' },
+              lesson: patchLessonSchema,
+            },
+            required: ['op', 'lessonId', 'lesson'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'insert_lesson' },
+              afterLessonId: { type: ['string', 'null'] },
+              lesson: patchLessonSchema,
+            },
+            required: ['op', 'afterLessonId', 'lesson'],
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              op: { const: 'update_metadata' },
+              changes: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  title: { type: ['string', 'null'] },
+                  description: { type: ['string', 'null'] },
+                  objectives: {
+                    type: ['array', 'null'],
+                    items: { type: 'string' },
+                  },
+                  estimatedMinutes: { type: ['integer', 'null'] },
+                },
+                required: [
+                  'title',
+                  'description',
+                  'objectives',
+                  'estimatedMinutes',
+                ],
+              },
+            },
+            required: ['op', 'changes'],
+          },
         ],
       },
     },
-  }, required: ['summary', 'patches'],
+  },
+  required: ['summary', 'patches'],
 };

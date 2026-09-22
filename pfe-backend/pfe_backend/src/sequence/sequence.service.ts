@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Sequence } from './sequence.entity';
 import { CourseModule } from 'src/course-module/course-module.entity';
 import { CreateSequenceDto, UpdateSequenceDto } from './dto/sequence.dto';
 import { ReorderItemDto } from 'src/common/dto/reorder.dto';
 import { ScenarioService } from 'src/scenario/scenario.service';
+import { applyReorder } from 'src/common/utils/reorder.util';
 
 @Injectable()
 export class SequenceService {
@@ -122,27 +123,13 @@ export class SequenceService {
         requesterRole,
       );
     }
-    if (!items.length) return this.findByModule(moduleId);
-
-    const ids = items.map((item) => item.id);
-    const sequences = await this.sequenceRepo.find({
-      where: { id: In(ids), module: { id: moduleId } },
-      relations: ['module'],
-    });
-
-    if (sequences.length !== ids.length) {
-      throw new NotFoundException(
-        'Une ou plusieurs séquences sont introuvables dans ce module',
-      );
-    }
-
-    await this.sequenceRepo.manager.transaction(async (manager) => {
-      await Promise.all(
-        items.map((item) =>
-          manager.update(Sequence, item.id, { ordre: item.ordre }),
-        ),
-      );
-    });
+    await applyReorder(
+      this.sequenceRepo,
+      Sequence,
+      { module: { id: moduleId } },
+      items,
+      'Une ou plusieurs séquences sont introuvables dans ce module',
+    );
 
     return this.findByModule(moduleId);
   }

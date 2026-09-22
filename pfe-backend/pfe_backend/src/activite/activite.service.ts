@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Activite } from './activite.entity';
 import { Sequence } from 'src/sequence/sequence.entity';
 import { CreateActiviteDto, UpdateActiviteDto } from './dto/activite.dto';
 import { ReorderItemDto } from 'src/common/dto/reorder.dto';
 import { ScenarioService } from 'src/scenario/scenario.service';
+import { applyReorder } from 'src/common/utils/reorder.util';
 
 @Injectable()
 export class ActiviteService {
@@ -129,27 +130,13 @@ export class ActiviteService {
         requesterRole,
       );
     }
-    if (!items.length) return this.findBySequence(sequenceId);
-
-    const ids = items.map((item) => item.id);
-    const activites = await this.activiteRepo.find({
-      where: { id: In(ids), sequence: { id: sequenceId } },
-      relations: ['sequence'],
-    });
-
-    if (activites.length !== ids.length) {
-      throw new NotFoundException(
-        'Une ou plusieurs activités sont introuvables dans cette séquence',
-      );
-    }
-
-    await this.activiteRepo.manager.transaction(async (manager) => {
-      await Promise.all(
-        items.map((item) =>
-          manager.update(Activite, item.id, { ordre: item.ordre }),
-        ),
-      );
-    });
+    await applyReorder(
+      this.activiteRepo,
+      Activite,
+      { sequence: { id: sequenceId } },
+      items,
+      'Une ou plusieurs activités sont introuvables dans cette séquence',
+    );
 
     return this.findBySequence(sequenceId);
   }

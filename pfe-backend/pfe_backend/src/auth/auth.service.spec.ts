@@ -9,6 +9,9 @@ describe('AuthService', () => {
     signAsync: jest.fn(() => Promise.resolve('signed-token')),
     verify: jest.fn(),
   };
+  const authTokenUtils = {
+    generateToken: jest.fn(() => Promise.resolve('signed-token')),
+  };
   const configService = {
     get: jest.fn(() => 'test-secret'),
   };
@@ -26,11 +29,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new AuthService(
-      userService as never,
-      jwtService as never,
-      configService as never,
-    );
+    service = new AuthService(userService as never, authTokenUtils as never);
   });
 
   it('returns a token and safe user data on valid credentials', async () => {
@@ -57,13 +56,12 @@ describe('AuthService', () => {
         email: 'teacher@example.com',
       }),
     );
-    expect(jwtService.signAsync).toHaveBeenCalledWith(
+    expect(authTokenUtils.generateToken).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 2,
         email: 'teacher@example.com',
         role: 'teacher',
       }),
-      { secret: 'test-secret' },
     );
   });
 

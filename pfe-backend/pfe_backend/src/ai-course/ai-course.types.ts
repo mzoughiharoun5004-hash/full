@@ -67,7 +67,10 @@ export interface AiCourseBrief {
 
 export interface AiCourseProvider {
   createOutline(brief: AiCourseBrief): Promise<AiCourseOutline>;
-  createDraft(brief: AiCourseBrief, outline?: AiCourseOutline): Promise<CourseDocument>;
+  createDraft(
+    brief: AiCourseBrief,
+    outline?: AiCourseOutline,
+  ): Promise<CourseDocument>;
   proposeEdit(
     instruction: string,
     scope: AiScope,

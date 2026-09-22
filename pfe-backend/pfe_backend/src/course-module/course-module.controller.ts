@@ -11,7 +11,8 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   requesterFrom,
   type AuthenticatedRequest,
@@ -33,11 +34,15 @@ export class CourseModuleController {
   constructor(private readonly moduleService: CourseModuleService) {}
 
   @Get()
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'List all modules', deprecated: true })
   findAll() {
     return this.moduleService.findAll();
   }
 
   @Get('scenario/:scenarioId')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find modules by scenario', deprecated: true })
   findByScenario(@Param('scenarioId', ParseIntPipe) scenarioId: number) {
     return this.moduleService.findByScenario(scenarioId);
   }
@@ -58,6 +63,8 @@ export class CourseModuleController {
   }
 
   @Get(':id')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find one module by id', deprecated: true })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.moduleService.findOne(id);
   }

@@ -11,7 +11,8 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   requesterFrom,
   type AuthenticatedRequest,
@@ -30,11 +31,15 @@ export class SequenceController {
   constructor(private readonly sequenceService: SequenceService) {}
 
   @Get()
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'List all sequences', deprecated: true })
   findAll() {
     return this.sequenceService.findAll();
   }
 
   @Get('module/:moduleId')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find sequences by module', deprecated: true })
   findByModule(@Param('moduleId', ParseIntPipe) moduleId: number) {
     return this.sequenceService.findByModule(moduleId);
   }
@@ -55,6 +60,8 @@ export class SequenceController {
   }
 
   @Get(':id')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find one sequence by id', deprecated: true })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.sequenceService.findOne(id);
   }

@@ -27,12 +27,14 @@ import {
 import { AuthGuard } from 'src/auth/guard/auth.guard';
 import { ScenarioService } from 'src/scenario/scenario.service';
 import { ScormService } from './scorm.service';
+import { ScormPreviewService } from './scorm-preview.service';
 
 @ApiTags('scorm')
 @Controller('scorm')
 export class ScormController {
   constructor(
     private readonly scormService: ScormService,
+    private readonly scormPreviewService: ScormPreviewService,
     private readonly scenarioService: ScenarioService,
   ) {}
 
@@ -66,7 +68,7 @@ export class ScormController {
     }),
   )
   async uploadScorm(@UploadedFile() file: Express.Multer.File) {
-    return this.scormService.uploadScormPackage(file);
+    return this.scormPreviewService.uploadScormPackage(file);
   }
 
   @Get('uploads/:packageId')
@@ -76,16 +78,19 @@ export class ScormController {
     summary: 'Recuperer les metadonnees du package SCORM uploade',
   })
   async getUploadedScorm(@Param('packageId') packageId: string) {
-    return this.scormService.getUploadedScormPackage(packageId);
+    return this.scormPreviewService.getUploadedScormPackage(packageId);
   }
 
   @Get('uploads/:packageId/viewer')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Afficher un package SCORM uploade' })
   async viewUploadedScorm(
     @Param('packageId') packageId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const html = await this.scormService.buildUploadedScormViewer(packageId);
+    const html =
+      await this.scormPreviewService.buildUploadedScormViewer(packageId);
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',

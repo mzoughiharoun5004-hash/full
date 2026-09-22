@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { CourseModule } from './course-module.entity';
 import {
   CreateCourseModuleDto,
@@ -8,6 +8,7 @@ import {
 } from './dto/course-module.dto';
 import { ReorderItemDto } from 'src/common/dto/reorder.dto';
 import { ScenarioService } from 'src/scenario/scenario.service';
+import { applyReorder } from 'src/common/utils/reorder.util';
 import { Quiz } from 'src/quiz/quiz.entity';
 
 interface ModuleLessonSummary {
@@ -118,27 +119,13 @@ export class CourseModuleService {
         requesterRole,
       );
     }
-    if (!items.length) return this.findByScenario(scenarioId);
-
-    const ids = items.map((item) => item.id);
-    const modules = await this.moduleRepo.find({
-      where: { id: In(ids), scenario: { id: scenarioId } },
-      relations: ['scenario'],
-    });
-
-    if (modules.length !== ids.length) {
-      throw new NotFoundException(
-        'Un ou plusieurs modules sont introuvables dans ce scénario',
-      );
-    }
-
-    await this.moduleRepo.manager.transaction(async (manager) => {
-      await Promise.all(
-        items.map((item) =>
-          manager.update(CourseModule, item.id, { ordre: item.ordre }),
-        ),
-      );
-    });
+    await applyReorder(
+      this.moduleRepo,
+      CourseModule,
+      { scenario: { id: scenarioId } },
+      items,
+      'Un ou plusieurs modules sont introuvables dans ce scénario',
+    );
 
     return this.findByScenario(scenarioId);
   }

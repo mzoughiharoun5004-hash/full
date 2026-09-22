@@ -1,11 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
+﻿import { BadRequestException } from '@nestjs/common';
 import { join, resolve } from 'node:path';
 import JSZip from 'jszip';
 import vm from 'node:vm';
 import { StatutScenario } from 'src/common/enums';
 import { CourseDocument } from 'src/scenario/course-document.types';
 import { Scenario } from 'src/scenario/scenario.entity';
-import { ScormService } from './scorm.service';
+import { ScormBuildService } from './scorm-build.service';
+import { ScormPdfService } from './scorm-pdf.service';
+import { ScormPreviewService } from './scorm-preview.service';
 
 jest.mock('puppeteer', () => ({
   __esModule: true,
@@ -95,7 +97,7 @@ describe('ScormService', () => {
     const scenarioService = {
       resolveCourseDocumentForExport: jest.fn().mockReturnValue(course),
     };
-    const service = new ScormService(
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -232,7 +234,7 @@ describe('ScormService', () => {
     };
     const scenarioRepo = { findOne: jest.fn() };
     const scenarioService = { resolveCourseDocumentForExport: jest.fn() };
-    const service = new ScormService(
+    const service = new ScormPdfService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -278,7 +280,7 @@ describe('ScormService', () => {
     };
     const scenarioRepo = { findOne: jest.fn() };
     const scenarioService = { resolveCourseDocumentForExport: jest.fn() };
-    const service = new ScormService(
+    const service = new ScormPdfService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -318,12 +320,16 @@ describe('ScormService', () => {
     };
     const scenarioRepo = { findOne: jest.fn() };
     const scenarioService = { resolveCourseDocumentForExport: jest.fn() };
-    const service = new ScormService(
+    const pdfService = new ScormPdfService(
+      scenarioRepo as never,
+      scenarioService as never,
+    );
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
 
-    const html = (service as any).buildPdfHtml(statementCourse) as string;
+    const html = (pdfService as any).buildPdfHtml(statementCourse) as string;
     const runtime = (service as any).buildRuntime() as string;
 
     expect(html).toContain('<div class="statement-label">Tip</div>');
@@ -354,12 +360,16 @@ describe('ScormService', () => {
     };
     const scenarioRepo = { findOne: jest.fn() };
     const scenarioService = { resolveCourseDocumentForExport: jest.fn() };
-    const service = new ScormService(
+    const pdfService = new ScormPdfService(
+      scenarioRepo as never,
+      scenarioService as never,
+    );
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
 
-    const html = (service as any).buildPdfHtml(calloutCourse) as string;
+    const html = (pdfService as any).buildPdfHtml(calloutCourse) as string;
     const runtime = (service as any).buildRuntime() as string;
 
     expect(html).toContain('callout statement-warning');
@@ -385,7 +395,7 @@ describe('ScormService', () => {
     const scenarioService = {
       resolveCourseDocumentForExport: jest.fn().mockReturnValue(themedCourse),
     };
-    const service = new ScormService(
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -491,7 +501,7 @@ describe('ScormService', () => {
         .fn()
         .mockReturnValue(flashcardCourse),
     };
-    const service = new ScormService(
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -650,7 +660,7 @@ describe('ScormService', () => {
         .fn()
         .mockReturnValue(courseWithBlankBlocks),
     };
-    const service = new ScormService(
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -789,7 +799,7 @@ describe('ScormService', () => {
     const scenarioService = {
       resolveCourseDocumentForExport: jest.fn().mockReturnValue(quizCourse),
     };
-    const service = new ScormService(
+    const service = new ScormBuildService(
       scenarioRepo as never,
       scenarioService as never,
     );
@@ -817,12 +827,10 @@ describe('ScormService', () => {
   });
 });
 
-describe('ScormService \u2014 zip extraction safety', () => {
-  const buildService = () => {
-    const scenarioRepo = { findOne: jest.fn() };
-    const scenarioService = { resolveCourseDocumentForExport: jest.fn() };
-    return new ScormService(scenarioRepo as never, scenarioService as never);
-  };
+describe('ScormPreviewService \u2014 zip extraction safety', () => {
+  // Uploaded-package handling moved to ScormPreviewService, which takes no
+  // repository or ScenarioService dependency.
+  const buildService = () => new ScormPreviewService();
 
   describe('normalizeZipEntryName', () => {
     // Expected values were confirmed by executing the real posix.normalize()

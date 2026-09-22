@@ -9,6 +9,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -64,7 +65,9 @@ export class AiScopeDto {
   @IsIn(['course', 'lesson', 'block'])
   type!: AiScope['type'];
 
-  @ValidateIf((value: AiScopeDto) => value.type === 'lesson' || value.type === 'block')
+  @ValidateIf(
+    (value: AiScopeDto) => value.type === 'lesson' || value.type === 'block',
+  )
   @IsString()
   @MaxLength(120)
   lessonId?: string;
@@ -82,6 +85,7 @@ export class ProposeAiEditDto {
 
   @Type(() => AiScopeDto)
   @IsObject()
+  @ValidateNested()
   scope!: AiScopeDto;
 
   @IsObject()

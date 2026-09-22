@@ -93,4 +93,83 @@ describe('RessourceService', () => {
 
     await expect(service.findOne(1, 2)).resolves.toBe(legacy);
   });
+
+  describe('scenario access checks', () => {
+    let mockPolicy: { assertCanView: jest.Mock; assertCanEdit: jest.Mock };
+    let mockModuleRepo: { findOne: jest.Mock };
+    let guardedService: RessourceService;
+
+    beforeEach(() => {
+      mockPolicy = {
+        assertCanView: jest.fn(),
+        assertCanEdit: jest.fn(),
+      };
+      mockModuleRepo = {
+        findOne: jest.fn(),
+      };
+      guardedService = new RessourceService(
+        repo as never,
+        mockModuleRepo as never,
+        mockPolicy as never,
+      );
+    });
+
+    it('verifies scenario view access in findByScenario', async () => {
+      repo.find.mockResolvedValueOnce([]);
+      mockPolicy.assertCanView.mockResolvedValueOnce({});
+
+      await guardedService.findByScenario(10, 2, 'user');
+
+      expect(mockPolicy.assertCanView).toHaveBeenCalledWith(10, 2, 'user');
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { scenario: { id: 10 } },
+        }),
+      );
+    });
+
+    it('propagates forbidden error from access policy in findByScenario', async () => {
+      mockPolicy.assertCanView.mockRejectedValueOnce(new ForbiddenException());
+
+      await expect(
+        guardedService.findByScenario(10, 2, 'user'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('verifies module scenario view access in findByModule', async () => {
+      mockModuleRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        scenario: { id: 10 },
+      });
+      repo.find.mockResolvedValueOnce([]);
+      mockPolicy.assertCanView.mockResolvedValueOnce({});
+
+      await guardedService.findByModule(5, 2, 'user');
+
+      expect(mockModuleRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 5 },
+        relations: ['scenario'],
+      });
+      expect(mockPolicy.assertCanView).toHaveBeenCalledWith(10, 2, 'user');
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { module: { id: 5 } },
+        }),
+      );
+    });
+
+    it('allows co-author to view a resource linked to their scenario', async () => {
+      const scenarioRes = ressourceStub({
+        uploadedBy: { id: 99 } as never,
+        scenario: { id: 10 } as never,
+      });
+      repo.findOne.mockResolvedValueOnce(scenarioRes);
+      mockPolicy.assertCanView.mockResolvedValueOnce({});
+
+      await expect(guardedService.findOne(1, 2, 'user')).resolves.toBe(
+        scenarioRes,
+      );
+      expect(mockPolicy.assertCanView).toHaveBeenCalledWith(10, 2, 'user');
+    });
+  });
 });

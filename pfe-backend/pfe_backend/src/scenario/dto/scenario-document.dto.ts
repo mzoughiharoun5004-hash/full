@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsObject } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsObject, IsOptional } from 'class-validator';
 import type { ScenarioDocument } from '../scenario-document.types';
 
 export class UpdateScenarioDocumentDto {
@@ -10,4 +10,13 @@ export class UpdateScenarioDocumentDto {
   })
   @IsObject()
   scenarioDocument: ScenarioDocument;
+
+  @ApiPropertyOptional({
+    description:
+      'Current scenarioDocumentVersion on the client. If provided and stale, the server returns 409 Conflict.',
+    type: Number,
+  })
+  @IsOptional()
+  @IsNumber()
+  expectedVersion?: number;
 }

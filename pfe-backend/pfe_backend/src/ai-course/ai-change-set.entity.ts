@@ -10,7 +10,12 @@ import {
 import { Scenario } from 'src/scenario/scenario.entity';
 import { User } from 'src/users/user.entity';
 
-export type AiChangeSetStatus = 'proposed' | 'applied' | 'rejected' | 'cancelled' | 'failed';
+export type AiChangeSetStatus =
+  | 'proposed'
+  | 'applied'
+  | 'rejected'
+  | 'cancelled'
+  | 'failed';
 
 @Entity()
 export class AiChangeSet {

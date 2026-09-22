@@ -11,7 +11,8 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   requesterFrom,
   type AuthenticatedRequest,
@@ -30,11 +31,15 @@ export class ActiviteController {
   constructor(private readonly activiteService: ActiviteService) {}
 
   @Get()
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'List all activites', deprecated: true })
   findAll() {
     return this.activiteService.findAll();
   }
 
   @Get('sequence/:sequenceId')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find activites by sequence', deprecated: true })
   findBySequence(@Param('sequenceId', ParseIntPipe) sequenceId: number) {
     return this.activiteService.findBySequence(sequenceId);
   }
@@ -55,6 +60,8 @@ export class ActiviteController {
   }
 
   @Get(':id')
+  @SkipThrottle({ short: true, medium: true })
+  @ApiOperation({ summary: 'Find one activite by id', deprecated: true })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.activiteService.findOne(id);
   }

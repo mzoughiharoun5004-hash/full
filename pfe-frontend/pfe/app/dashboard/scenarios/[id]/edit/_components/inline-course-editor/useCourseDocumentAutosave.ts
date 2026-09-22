@@ -147,6 +147,18 @@ export function useCourseDocumentAutosave({
     setStatus('saved')
   }, [])
 
+  const flush = useCallback(async (): Promise<{
+    document: CourseDocument
+    version: number
+  } | null> => {
+    const saved = await saveNowRef.current()
+    if (!saved) return null
+    return {
+      document: latestDocumentRef.current,
+      version: versionRef.current,
+    }
+  }, [])
+
   useEffect(() => {
     saveNowRef.current = saveNow
   }, [saveNow])
@@ -189,6 +201,7 @@ export function useCourseDocumentAutosave({
     retry: saveNow,
     resetConflict,
     savedVersion,
+    flush,
     syncSavedDocument,
   }
 }

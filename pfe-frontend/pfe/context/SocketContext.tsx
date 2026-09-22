@@ -122,18 +122,19 @@ const SocketContext = createContext<SocketContextValue | null>(null)
 const ScenarioRoomContext = createContext<ScenarioRoomContextValue | null>(null)
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth()
+  const { hasSession } = useAuth()
   const socket = useMemo(() => {
-    if (!token) return null
-    // Recreate the connection only when the JWT changes so server-side socket
-    // auth, presence, and lock cleanup all follow the same session boundary.
+    if (!hasSession) return null
+    // No token is passed in the handshake: `withCredentials` makes the browser
+    // send the HttpOnly `auth_token` cookie, which the gateway reads. The
+    // connection is recreated only when the session flips, so server-side
+    // socket auth, presence, and lock cleanup follow the same boundary.
     return io(`${SOCKET_URL}/scenario-collaboration`, {
-      auth: { token },
       autoConnect: false,
       withCredentials: true,
       transports: ['websocket', 'polling'],
     })
-  }, [token])
+  }, [hasSession])
 
   const subscribeConnection = useCallback(
     (listener: () => void) => {

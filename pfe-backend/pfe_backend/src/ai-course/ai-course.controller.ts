@@ -1,10 +1,26 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { requesterFrom, type AuthenticatedRequest } from 'src/auth/authenticated-request';
+import {
+  requesterFrom,
+  type AuthenticatedRequest,
+} from 'src/auth/authenticated-request';
 import { AuthGuard } from 'src/auth/guard/auth.guard';
 import { RoleGuard } from 'src/role/role.guard';
 import { AiCourseService } from './ai-course.service';
-import { AiCourseBriefDto, CreateAiCourseDto, ProposeAiEditDto } from './dto/ai-course.dto';
+import {
+  AiCourseBriefDto,
+  CreateAiCourseDto,
+  ProposeAiEditDto,
+} from './dto/ai-course.dto';
 
 @ApiTags('ai-courses')
 @UseGuards(AuthGuard, RoleGuard)
@@ -15,7 +31,9 @@ export class AiCourseController {
 
   @Post('outline')
   @ApiOperation({ summary: 'Generate a reviewable AI course outline' })
-  outline(@Body() dto: AiCourseBriefDto) { return this.service.createOutline(dto); }
+  outline(@Body() dto: AiCourseBriefDto) {
+    return this.service.createOutline(dto);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create an AI-generated draft course' })
@@ -31,7 +49,15 @@ export class AiCourseController {
     @Request() req: AuthenticatedRequest,
   ) {
     const requester = requesterFrom(req);
-    return this.service.proposeEdit(scenarioId, requester.id, requester.role, dto.instruction, dto.scope as never, dto.courseDocument, dto.expectedVersion);
+    return this.service.proposeEdit(
+      scenarioId,
+      requester.id,
+      requester.role,
+      dto.instruction,
+      dto.scope as never,
+      dto.courseDocument,
+      dto.expectedVersion,
+    );
   }
 
   @Get('changes/:id')
@@ -55,6 +81,11 @@ export class AiCourseController {
   @Post('changes/:id/cancel')
   cancel(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     const requester = requesterFrom(req);
-    return this.service.setStatus(id, requester.id, requester.role, 'cancelled');
+    return this.service.setStatus(
+      id,
+      requester.id,
+      requester.role,
+      'cancelled',
+    );
   }
 }

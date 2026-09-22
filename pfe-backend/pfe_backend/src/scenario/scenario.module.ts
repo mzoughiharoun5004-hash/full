@@ -6,6 +6,7 @@ import { ScenarioActivityLog } from 'src/scenario-share/scenario-activity-log.en
 import { ScenarioComment } from 'src/scenario-share/scenario-comment.entity';
 import { ScenarioService } from './scenario.service';
 import { ScenarioController } from './scenario.controller';
+import { ScenarioAccessPolicy } from './scenario-access.policy';
 import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
@@ -19,7 +20,7 @@ import { AuthModule } from 'src/auth/auth.module';
     AuthModule,
   ],
   controllers: [ScenarioController],
-  providers: [ScenarioService],
-  exports: [ScenarioService, TypeOrmModule],
+  providers: [ScenarioService, ScenarioAccessPolicy],
+  exports: [ScenarioService, ScenarioAccessPolicy, TypeOrmModule],
 })
 export class ScenarioModule {}

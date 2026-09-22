@@ -88,22 +88,35 @@ export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> })
     return <div className="text-center py-24 text-slate-500">Scenario not found</div>
   }
 
-  const scenarioOwnerId = scenario.author?.id ?? scenario.ownerId
-  const isOwner = String(scenarioOwnerId ?? '') === String(user?.id ?? '')
+  const scenarioOwnerId =
+    scenario.author?.id ??
+    scenario.ownerId ??
+    scenario.user?.id ??
+    (scenario as { userId?: string | number }).userId
+  const isOwner = scenarioOwnerId != null && String(scenarioOwnerId) === String(user?.id ?? '')
   const hasShare = Boolean(
-    scenario.shares?.some((share) => String(share.user?.id ?? '') === String(user?.id ?? '')),
+    scenario.shares?.some((share) => {
+      const shareAny = share as unknown as {
+        user?: { id?: string | number }
+        sharedWith?: { id?: string | number }
+        sharedWithId?: string | number
+      }
+      const shareUserId = shareAny.sharedWith?.id ?? shareAny.sharedWithId ?? shareAny.user?.id
+      return String(shareUserId ?? '') === String(user?.id ?? '')
+    }),
   )
   const hasEditShare = userHasScenarioEditShare(scenario.shares, user?.id)
-  const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenario.status)
+  const scenarioStatus = scenario.status ?? scenario.statut
+  const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenarioStatus)
   const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({
     isOwner,
     hasEditShare,
-    status: scenario.status,
+    status: scenarioStatus,
   })
   const canEditScenario = canUserEditScenario({
     isOwner,
     hasEditShare,
-    status: scenario.status,
+    status: scenarioStatus,
   })
   const primaryActionLabel = canEditScenario
     ? 'Edit'

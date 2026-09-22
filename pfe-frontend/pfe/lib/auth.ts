@@ -1,14 +1,27 @@
 import Cookies from 'js-cookie'
 import type { User, UserRole } from '@/types'
 
-const TOKEN_KEY = 'edu_token'
+// The JWT is never held by JavaScript. It lives only in the backend's HttpOnly
+// `auth_token` cookie (set by POST /auth/login, cleared by POST /auth/logout),
+// so an XSS payload cannot read or exfiltrate the session.
+//
+// The two cookies below are non-credentials:
+//   edu_session — presence flag so proxy.ts can gate /dashboard without a
+//                 round trip. Forging it only renders a shell; every API call
+//                 is still authorized server-side from the HttpOnly cookie.
+//   edu_user    — display data (name, role) for the sidebar/topbar.
+const SESSION_KEY = 'edu_session'
 const USER_KEY = 'edu_user'
+// Written by earlier versions of the app; removed on every auth transition so
+// no stale JWT lingers in a JS-readable cookie.
+const LEGACY_TOKEN_KEY = 'edu_token'
 export const AUTH_CHANGED_EVENT = 'edu-auth-change'
 
 // Only store the minimum needed to render the UI without a network call.
 type StoredUser = Pick<User, 'id' | 'firstName' | 'lastName' | 'email' | 'role'>
 
 const COOKIE_OPTIONS = {
+  // Matches the one-day maxAge of the backend auth cookie.
   expires: 1,
   sameSite: 'strict' as const,
   secure: process.env.NODE_ENV === 'production',
@@ -20,28 +33,30 @@ function notifyAuthChanged() {
   }
 }
 
-export function setAuth(token: string, user: User) {
-  const minimalUser: StoredUser = {
+function toStoredUser(user: User): StoredUser {
+  return {
     id: user.id,
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
     role: user.role,
   }
-  Cookies.set(TOKEN_KEY, token, COOKIE_OPTIONS)
-  Cookies.set(USER_KEY, JSON.stringify(minimalUser), COOKIE_OPTIONS)
+}
+
+/**
+ * Record a signed-in session. Call this *after* a request that made the
+ * backend set the HttpOnly cookie (login), never on its own — the flag alone
+ * grants no access.
+ */
+export function setAuth(user: User) {
+  Cookies.remove(LEGACY_TOKEN_KEY)
+  Cookies.set(SESSION_KEY, '1', COOKIE_OPTIONS)
+  Cookies.set(USER_KEY, JSON.stringify(toStoredUser(user)), COOKIE_OPTIONS)
   notifyAuthChanged()
 }
 
 export function setStoredUser(user: User) {
-  const minimalUser: StoredUser = {
-    id: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    role: user.role,
-  }
-  Cookies.set(USER_KEY, JSON.stringify(minimalUser), COOKIE_OPTIONS)
+  Cookies.set(USER_KEY, JSON.stringify(toStoredUser(user)), COOKIE_OPTIONS)
   notifyAuthChanged()
 }
 
@@ -90,23 +105,44 @@ export function normalizeUser(raw: {
   }
 }
 
+/**
+ * Drop the client-side session. The HttpOnly cookie can only be expired by the
+ * backend, so callers that are logging out must also hit POST /auth/logout.
+ */
 export function clearAuth() {
-  Cookies.remove(TOKEN_KEY)
+  Cookies.remove(SESSION_KEY)
   Cookies.remove(USER_KEY)
+  Cookies.remove(LEGACY_TOKEN_KEY)
   notifyAuthChanged()
 }
 
-export function getToken(): string | null {
-  return Cookies.get(TOKEN_KEY) ?? null
+export function hasSession(): boolean {
+  return Cookies.get(SESSION_KEY) === '1'
 }
 
 export function getStoredUser(): User | null {
   const raw = Cookies.get(USER_KEY)
   if (!raw) return null
-  try { return JSON.parse(raw) as User }
+  try {
+    const parsed = JSON.parse(raw) as User & { role?: unknown }
+    // Coerce legacy object-form roles, e.g. { name: 'EDUCATOR' }, stored by older code.
+    // IMPORTANT: must NOT call normalizeUser here — that function sets
+    // createdAt: new Date().toISOString() when the field is absent, producing a
+    // different value on every call and breaking useSyncExternalStore's snapshot cache.
+    if (parsed.role && typeof parsed.role === 'object') {
+      const roleName = (parsed.role as { name?: string }).name?.toUpperCase()
+      parsed.role = roleName === 'ADMIN' ? 'ADMIN' : 'EDUCATOR'
+    } else if (typeof parsed.role === 'string') {
+      const up = parsed.role.toUpperCase()
+      parsed.role = up === 'ADMIN' ? 'ADMIN' : 'EDUCATOR'
+    }
+    // Coerce numeric id (backend sends number, schema expects string)
+    if (typeof parsed.id !== 'string') parsed.id = String(parsed.id)
+    return parsed as User
+  }
   catch { return null }
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken()
+  return hasSession()
 }

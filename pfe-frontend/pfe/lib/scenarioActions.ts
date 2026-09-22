@@ -8,7 +8,8 @@ export const approvedCollaboratorViewOnlyMessage =
   'This course is approved. You have view-only access as a collaborator.'
 
 export function isApprovedScenarioStatus(status?: ScenarioStatus | string | null) {
-  return status === 'APPROUVE' || status === 'EXPORTE'
+  const normalized = String(status ?? '').toUpperCase()
+  return normalized === 'APPROUVE' || normalized === 'EXPORTE'
 }
 
 export function userHasScenarioEditShare(
@@ -16,11 +17,23 @@ export function userHasScenarioEditShare(
   userId?: string | number | null,
 ): boolean {
   return Boolean(
-    shares?.some(
-      (share) =>
-        String(share.user?.id ?? '') === String(userId ?? '') &&
-        (share.permission === 'EDIT' || share.canEditContent || share.canEditStructure),
-    ),
+    shares?.some((share) => {
+      const shareAny = share as unknown as {
+        user?: { id?: string | number }
+        sharedWith?: { id?: string | number }
+        sharedWithId?: string | number
+        permission?: string
+        canEditContent?: boolean
+        canEditStructure?: boolean
+      }
+      const shareUserId =
+        shareAny.sharedWith?.id ?? shareAny.sharedWithId ?? shareAny.user?.id
+      const permission = String(shareAny.permission ?? '').toUpperCase()
+      return (
+        String(shareUserId ?? '') === String(userId ?? '') &&
+        (permission === 'EDIT' || shareAny.canEditContent || shareAny.canEditStructure)
+      )
+    }),
   )
 }
 

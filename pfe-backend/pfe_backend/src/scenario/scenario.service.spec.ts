@@ -3,6 +3,7 @@ import { Brackets } from 'typeorm';
 import { StatutScenario } from 'src/common/enums';
 import { Scenario } from './scenario.entity';
 import { ScenarioService } from './scenario.service';
+import { ScenarioAccessPolicy } from './scenario-access.policy';
 
 /**
  * Visibility filters are wrapped in a Brackets group so later `.andWhere(...)`
@@ -148,11 +149,16 @@ describe('ScenarioService', () => {
     };
     scenarioRepo.createQueryBuilder.mockReturnValue(queryBuilder);
     scenarioRepo.manager.getRepository.mockReturnValue(userRepo);
+    const accessPolicy = new ScenarioAccessPolicy(
+      scenarioRepo as never,
+      shareRepo as never,
+    );
     service = new ScenarioService(
       scenarioRepo as never,
       shareRepo as never,
       repoMock() as never,
       commentRepo as never,
+      accessPolicy,
     );
   });
 

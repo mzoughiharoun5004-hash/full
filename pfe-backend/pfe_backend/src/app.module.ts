@@ -25,6 +25,7 @@ import { AiCourseModule } from './ai-course/ai-course.module';
 import { RoleGuard } from './role/role.guard';
 import config from './config/config';
 import dbConfig from './config/db.config';
+import * as Joi from 'joi';
 
 @Module({
   imports: [
@@ -33,6 +34,29 @@ import dbConfig from './config/db.config';
       isGlobal: true,
       cache: true,
       load: [config],
+      validationSchema: Joi.object({
+        NODE_ENV: Joi.string()
+          .valid('development', 'production')
+          .default('development'),
+        JWT_SECRET: Joi.string().min(32).required(),
+        DB_HOST: Joi.string().optional(),
+        DATABASE_URL: Joi.string().optional(),
+        DB_PORT: Joi.number().default(5432),
+        CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
+        AI_PROVIDER: Joi.string().valid('groq').default('groq'),
+        AI_MODEL: Joi.string().default('openai/gpt-oss-20b'),
+        PEXELS_API_KEY: Joi.string().optional(),
+        // Socket.IO Redis adapter — omit all of these to run single-process.
+        REDIS_ENABLED: Joi.boolean().optional(),
+        REDIS_URL: Joi.string().uri().optional(),
+        REDIS_HOST: Joi.string().optional(),
+        REDIS_PORT: Joi.number().port().default(6379),
+        REDIS_PASSWORD: Joi.string().allow('').optional(),
+        REDIS_DB: Joi.number().min(0).default(0),
+        // SCORM preview upload pruning.
+        SCORM_UPLOAD_TTL_HOURS: Joi.number().min(1).default(24),
+        SCORM_CLEANUP_INTERVAL_MINUTES: Joi.number().min(0).default(60),
+      }),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

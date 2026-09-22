@@ -17,6 +17,8 @@ import { AuthService } from 'src/auth/auth.service';
 import { isApprovedScenarioStatut, StatutScenario } from 'src/common/enums';
 import { Scenario } from 'src/scenario/scenario.entity';
 import { ScenarioShare } from 'src/scenario-share/scenario-share.entity';
+import { ScenarioAccessPolicy } from 'src/scenario/scenario-access.policy';
+import { AUTH_COOKIE_NAME, readCookie } from 'src/common/utils/cookies.util';
 
 interface CollaborationUser {
   id: number;
@@ -131,6 +133,7 @@ export class ScenarioCollaborationGateway
     private readonly scenarioRepo: Repository<Scenario>,
     @InjectRepository(ScenarioShare)
     private readonly shareRepo: Repository<ScenarioShare>,
+    private readonly accessPolicy: ScenarioAccessPolicy,
   ) {}
 
   async handleConnection(client: ScenarioSocket): Promise<void> {
@@ -386,6 +389,17 @@ export class ScenarioCollaborationGateway
       return this.cleanToken(authorization);
     }
 
+    // The browser sends the HttpOnly auth cookie on the handshake as long as
+    // the client connects with `withCredentials: true`, so a frontend that no
+    // longer holds the JWT in JS can still open a socket.
+    const cookieToken = readCookie(
+      client.handshake.headers.cookie,
+      AUTH_COOKIE_NAME,
+    );
+    if (cookieToken?.trim()) {
+      return this.cleanToken(cookieToken);
+    }
+
     return null;
   }
 
@@ -422,48 +436,7 @@ export class ScenarioCollaborationGateway
     scenarioId: string,
     user: CollaborationUser,
   ): Promise<ScenarioAccess> {
-    const scenario = await this.scenarioRepo.findOne({
-      where: { id: Number(scenarioId) },
-      relations: ['user'],
-    });
-
-    if (!scenario) {
-      return { canView: false, canEdit: false };
-    }
-
-    if (scenario.user?.id === user.id) {
-      return { canView: true, canEdit: true };
-    }
-
-    const share = await this.shareRepo.findOne({
-      where: {
-        scenario: { id: Number(scenarioId) },
-        sharedWith: { id: user.id },
-      },
-    });
-
-    if (share) {
-      if (isApprovedScenarioStatut(scenario.statut)) {
-        return { canView: true, canEdit: false };
-      }
-
-      return {
-        canView: true,
-        canEdit:
-          share.permission === 'edit' ||
-          share.canEditContent === true ||
-          share.canEditStructure === true,
-      };
-    }
-
-    if (user.role?.toLowerCase() === 'admin') {
-      if (scenario.statut === StatutScenario.BROUILLON) {
-        return { canView: false, canEdit: false };
-      }
-      return { canView: true, canEdit: false };
-    }
-
-    return { canView: false, canEdit: false };
+    return this.accessPolicy.getAccess(Number(scenarioId), user.id, user.role);
   }
 
   private parseScenarioId(value: number | string | undefined): string {

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -44,6 +45,12 @@ export class Scenario {
   })
   statut!: StatutScenario;
 
+  // GIN index required for the jsonb courseDocument column — a plain B-tree
+  // index (TypeORM's default) fails once documents exceed Postgres's 8191-byte
+  // btree row limit. TypeORM's @Index() decorator has no "index type" option,
+  // so synchronize is told to leave this index alone; main.ts creates the real
+  // "USING GIN" index via raw SQL once at bootstrap instead.
+  @Index('IDX_scenario_courseDocument_gin', { synchronize: false })
   @Column({ type: 'jsonb', nullable: true })
   courseDocument!: CourseDocument | null;
 

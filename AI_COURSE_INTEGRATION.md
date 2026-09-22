@@ -49,7 +49,7 @@ AI does not receive database access, direct application tools, approval rights, 
 | Persistence target | Existing `Scenario.courseDocument` only |
 | Course state | Generated courses remain `BROUILLON` and carry `metadata.source = 'ai_draft'` |
 | Concurrency | Apply uses the existing `courseDocumentVersion` optimistic lock |
-| Media | Generate placeholders and accessible alt text; do not download external assets in MVP |
+| Media | MVP generates placeholders and accessible alt text. Since implemented: AI-created/edited image and video blocks are enriched server-side via `PexelsMediaProvider` (Pexels search) when `PEXELS_API_KEY` is set, with attribution metadata; falls back to the original placeholder (`loremflickr.com` image / sample video) when no key, no match, or the API is unavailable. |
 
 The request to Groq must remain server-side. The browser must never receive the provider key.
 
@@ -114,7 +114,7 @@ These capabilities were already present before the AI feature work began:
 ### Deferred beyond the MVP
 
 - Quiz-question generation and a dedicated quiz-scope action.
-- Branching/Hybrid automatic generation, grounded document retrieval, and licensed media generation/search.
+- Branching/Hybrid automatic generation and grounded document retrieval. (Licensed media *search* is implemented via Pexels — see the Media row above; media *generation* remains deferred.)
 - Whole-course changes shown as individually selectable lesson patches rather than a single proposal.
 - Provider failover, provider usage/token telemetry, product-level per-user AI quota, and scheduled evaluation exports.
 

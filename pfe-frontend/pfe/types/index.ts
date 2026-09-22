@@ -159,9 +159,9 @@ export interface CourseKnowledgeCheck {
   allowRetry?: boolean
 }
 
-export interface CourseBlock {
+export interface CourseBlockBase<TType extends CourseBlockType> {
   id: string
-  type: CourseBlockType
+  type: TType
   category?: CourseBlockCategory
   title?: string
   content?: string
@@ -170,6 +170,19 @@ export interface CourseBlock {
   knowledgeCheck?: CourseKnowledgeCheck
   metadata?: Record<string, unknown>
 }
+
+/**
+ * A type-discriminated course block. `type` now narrows a block to its
+ * concrete variant while keeping partially-authored blocks valid.
+ */
+export type CourseBlock = {
+  [TType in CourseBlockType]: CourseBlockBase<TType>
+}[CourseBlockType]
+
+export type CourseBlockOfType<TType extends CourseBlockType> = Extract<
+  CourseBlock,
+  { type: TType }
+>
 
 export interface BranchingChoice {
   id: string
@@ -497,8 +510,10 @@ export interface Scenario {
   statut?: string
   template: ScenarioTemplate
   isPublic: boolean
+  user?: User
+  userId?: string | number
   author?: User
-  ownerId?: string
+  ownerId?: string | number
   ownerName?: string
   modules: ScenarioModule[]
   shares?: ScenarioShare[]

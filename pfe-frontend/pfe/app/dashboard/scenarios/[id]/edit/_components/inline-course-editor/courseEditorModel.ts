@@ -627,7 +627,7 @@ export function createBlock(type: CourseBlockType): CourseBlock {
     assetUrl: '',
     items: defaultItemsFor(type),
     metadata: defaultMetadataFor(type),
-  }
+  } as CourseBlock
 }
 
 export function duplicateBlock(block: CourseBlock): CourseBlock {

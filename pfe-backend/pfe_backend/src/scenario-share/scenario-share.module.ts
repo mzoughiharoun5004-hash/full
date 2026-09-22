@@ -9,6 +9,7 @@ import { ScenarioShareController } from './scenario-share.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { Scenario } from 'src/scenario/scenario.entity';
 import { User } from 'src/users/user.entity';
+import { ScenarioModule } from 'src/scenario/scenario.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { User } from 'src/users/user.entity';
       User,
     ]),
     AuthModule,
+    ScenarioModule,
   ],
   controllers: [ScenarioShareController],
   providers: [ScenarioShareService],

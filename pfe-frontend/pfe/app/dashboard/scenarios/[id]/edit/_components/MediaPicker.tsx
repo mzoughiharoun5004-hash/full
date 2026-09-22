@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import { FileText, Film, Image as ImageIcon, Search, Upload } from 'lucide-react'
@@ -19,6 +20,7 @@ interface MediaPickerProps {
   onClose: () => void
   acceptedTypes: MediaType[]
   onSelect: (asset: MediaAsset) => void
+  scenarioId?: number
 }
 
 function assetUrl(asset: MediaAsset): string {
@@ -40,28 +42,38 @@ function acceptFromTypes(types: MediaType[]): string {
   return accept.join(',')
 }
 
-export function MediaPicker({ open, onClose, acceptedTypes, onSelect }: MediaPickerProps) {
+export function MediaPicker({ open, onClose, acceptedTypes, onSelect, scenarioId }: MediaPickerProps) {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [search, setSearch] = useState('')
+  const params = useParams()
+  const routeScenarioId = params?.id && typeof params.id === 'string' && !isNaN(parseInt(params.id, 10))
+    ? parseInt(params.id, 10)
+    : undefined
+  const effectiveScenarioId = scenarioId ?? routeScenarioId
 
   const primaryType = acceptedTypes.length === 1 ? acceptedTypes[0] : undefined
   const { data: assets, isLoading } = useQuery<MediaAsset[]>({
-    queryKey: ['media-picker', acceptedTypes.join(','), search],
-    queryFn: () =>
-      mediaApi
-        .getAll({
-          type: primaryType,
-          search: search || undefined,
-        })
-        .then((response) =>
-          response.data.filter((asset: MediaAsset) => acceptedTypes.includes(asset.type)),
-        ),
+    queryKey: ['media-picker', effectiveScenarioId, acceptedTypes.join(','), search],
+    queryFn: () => {
+      const fetcher = effectiveScenarioId
+        ? mediaApi.getByScenario(effectiveScenarioId, {
+            type: primaryType,
+            search: search || undefined,
+          })
+        : mediaApi.getAll({
+            type: primaryType,
+            search: search || undefined,
+          })
+      return fetcher.then((response) =>
+        response.data.filter((asset: MediaAsset) => acceptedTypes.includes(asset.type)),
+      )
+    },
     enabled: open,
   })
 
   const { mutate: uploadFile, isPending: uploading } = useMutation({
-    mutationFn: (file: File) => mediaApi.upload(file),
+    mutationFn: (file: File) => mediaApi.upload(file, effectiveScenarioId),
     onSuccess: (response) => {
       toast.success('File uploaded')
       qc.invalidateQueries({ queryKey: ['media'] })

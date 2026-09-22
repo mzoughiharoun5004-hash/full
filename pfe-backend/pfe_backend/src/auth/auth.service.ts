@@ -1,16 +1,15 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 
 import { UserService } from 'src/users/user.services';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AuthPayloadDTO } from './dto/login.dto';
+import { AuthTokenUtils } from 'src/lib/auth';
+
 @Injectable()
 export class AuthService {
   constructor(
-    private userService: UserService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly userService: UserService,
+    private readonly authTokenUtils: AuthTokenUtils,
   ) {}
 
   async validateUser(data: AuthPayloadDTO) {
@@ -30,27 +29,21 @@ export class AuthService {
     const loggedInUser = await this.userService.recordSuccessfulLogin(findUser);
     return {
       userInfo: this.userService.toSafeUser(loggedInUser),
-      access_token: await this.jwtService.signAsync(
-        {
-          id: loggedInUser.id,
-          firstName: loggedInUser.firstName,
-          lastName: loggedInUser.lastName,
-          email: loggedInUser.email,
-          role: loggedInUser.role?.name,
-        },
-        { secret: this.configService.get('jwt.secretCode') },
-      ),
+      access_token: await this.authTokenUtils.generateToken({
+        id: loggedInUser.id,
+        firstName: loggedInUser.firstName,
+        lastName: loggedInUser.lastName,
+        email: loggedInUser.email,
+        role: loggedInUser.role?.name,
+      }),
     };
   }
   validateToken(token: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return this.jwtService.verify(token, {
-      secret: this.configService.get('jwt.secretCode'),
-    });
+    return this.authTokenUtils.verifyToken(token);
   }
 
   async validateSessionToken(token: string) {
-    const decoded = this.validateToken(token) as { id?: number | string };
+    const decoded = this.validateToken(token);
     const currentUser = decoded.id
       ? await this.userService.getUserById(String(decoded.id))
       : null;
