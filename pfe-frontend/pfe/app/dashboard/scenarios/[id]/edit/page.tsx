@@ -7,6 +7,7 @@ import { scenariosApi } from '@/lib/api'
 import { Spinner } from '@/components/ui/Spinner'
 import { InlineScenarioCourseEditor } from './_components/inline-course-editor/InlineScenarioCourseEditor'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { ScenarioRoomProvider } from '@/context/SocketContext'
 import {
   canUserEditScenario,
@@ -23,6 +24,7 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
   const { user } = useAuth()
+  const { t } = useTranslation()
   const viewMode = searchParams.get('mode') === 'view'
 
   const { data: scenario, isLoading, isError, refetch } = useQuery<Scenario>({
@@ -41,16 +43,16 @@ export default function ScenarioEditPage({ params }: { params: Promise<Ctx> }) {
   if (isError || !scenario) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-lg font-bold">Course could not be loaded</h1>
+        <h1 className="text-lg font-bold">{t('editor_load_error_title')}</h1>
         <p className="max-w-md text-sm text-[var(--lux-muted)]">
-          Check your connection and try again. No course changes have been started.
+          {t('editor_load_error_body')}
         </p>
         <button
           type="button"
           onClick={() => void refetch()}
           className="rounded-lg bg-[var(--lux-primary)] px-4 py-2 text-sm font-semibold text-white"
         >
-          Retry
+          {t('editor_load_error_retry')}
         </button>
       </div>
     )

@@ -377,23 +377,35 @@ export abstract class ScormExportBase {
     const statementWarningBg = isLight ? '#fee2e2' : 'rgba(239,68,68,.12)';
     const statementWarningBorder = isLight ? '#fca5a5' : 'rgba(239,68,68,.38)';
     const statementWarningText = isLight ? '#7f1d1d' : '#fecaca';
-    const statementWarningBadgeBg = isLight ? 'rgba(239,68,68,.18)' : 'rgba(239,68,68,.24)';
+    const statementWarningBadgeBg = isLight
+      ? 'rgba(239,68,68,.18)'
+      : 'rgba(239,68,68,.24)';
     const statementWarningBadgeText = isLight ? '#991b1b' : '#fca5a5';
-    const statementWarningBadgeBorder = isLight ? 'rgba(239,68,68,.3)' : 'rgba(239,68,68,.35)';
+    const statementWarningBadgeBorder = isLight
+      ? 'rgba(239,68,68,.3)'
+      : 'rgba(239,68,68,.35)';
 
     const statementTipBg = isLight ? '#dcfce7' : 'rgba(34,197,94,.12)';
     const statementTipBorder = isLight ? '#86efac' : 'rgba(34,197,94,.38)';
     const statementTipText = isLight ? '#14532d' : '#bbf7d0';
-    const statementTipBadgeBg = isLight ? 'rgba(34,197,94,.18)' : 'rgba(34,197,94,.24)';
+    const statementTipBadgeBg = isLight
+      ? 'rgba(34,197,94,.18)'
+      : 'rgba(34,197,94,.24)';
     const statementTipBadgeText = isLight ? '#166534' : '#86efac';
-    const statementTipBadgeBorder = isLight ? 'rgba(34,197,94,.3)' : 'rgba(34,197,94,.35)';
+    const statementTipBadgeBorder = isLight
+      ? 'rgba(34,197,94,.3)'
+      : 'rgba(34,197,94,.35)';
 
     const statementNoteBg = isLight ? '#fef3c7' : 'rgba(245,158,11,.12)';
     const statementNoteBorder = isLight ? '#facc15' : 'rgba(245,158,11,.38)';
     const statementNoteText = isLight ? '#78350f' : '#fde68a';
-    const statementNoteBadgeBg = isLight ? 'rgba(245,158,11,.18)' : 'rgba(245,158,11,.24)';
+    const statementNoteBadgeBg = isLight
+      ? 'rgba(245,158,11,.18)'
+      : 'rgba(245,158,11,.24)';
     const statementNoteBadgeText = isLight ? '#92400e' : '#fcd34d';
-    const statementNoteBadgeBorder = isLight ? 'rgba(245,158,11,.3)' : 'rgba(245,158,11,.35)';
+    const statementNoteBadgeBorder = isLight
+      ? 'rgba(245,158,11,.3)'
+      : 'rgba(245,158,11,.35)';
 
     return `:root,body[data-preview-theme="${isLight ? 'light' : 'dark'}"]{--lux-bg:${bg};--lux-bg-alt:${bgAlt};--lux-surface:${surface};--lux-surface-soft:${surfaceSoft};--lux-elevated:${elevated};--lux-text:${text};--lux-text-strong:${textStrong};--lux-muted:${muted};--lux-muted-soft:${mutedSoft};--lux-line:${line};--lux-line-strong:${lineStrong};--lux-primary:${accent};--lux-primary-hover:${primaryHover};--lux-primary-soft:${primarySoft};--lux-primary-muted:${primaryMuted};--lux-overlay:${isLight ? 'rgba(31,27,22,.045)' : 'rgba(246,240,230,.06)'};--lux-overlay-hover:${isLight ? 'rgba(31,27,22,.075)' : 'rgba(246,240,230,.09)'};--lux-scroll-track:${scrollTrack};--lux-scroll-thumb:${scrollThumb};--lux-scroll-thumb-hover:${scrollThumbHover};--statement-info-bg:${statementInfoBg};--statement-info-border:${statementInfoBorder};--statement-info-text:${statementInfoText};--statement-info-badge-bg:${statementInfoBadgeBg};--statement-info-badge-text:${statementInfoBadgeText};--statement-info-badge-border:${statementInfoBadgeBorder};--statement-warning-bg:${statementWarningBg};--statement-warning-border:${statementWarningBorder};--statement-warning-text:${statementWarningText};--statement-warning-badge-bg:${statementWarningBadgeBg};--statement-warning-badge-text:${statementWarningBadgeText};--statement-warning-badge-border:${statementWarningBadgeBorder};--statement-tip-bg:${statementTipBg};--statement-tip-border:${statementTipBorder};--statement-tip-text:${statementTipText};--statement-tip-badge-bg:${statementTipBadgeBg};--statement-tip-badge-text:${statementTipBadgeText};--statement-tip-badge-border:${statementTipBadgeBorder};--statement-note-bg:${statementNoteBg};--statement-note-border:${statementNoteBorder};--statement-note-text:${statementNoteText};--statement-note-badge-bg:${statementNoteBadgeBg};--statement-note-badge-text:${statementNoteBadgeText};--statement-note-badge-border:${statementNoteBadgeBorder};--bg:var(--lux-bg);--panel:var(--lux-surface);--card:var(--lux-surface-soft);--line:var(--lux-line);--text:var(--lux-text);--muted:var(--lux-muted);--accent:var(--lux-primary);color-scheme:${isLight ? 'light' : 'dark'}}body[data-preview-theme="dark"]{--statement-info-bg:#182420;--statement-info-border:rgba(246,240,230,.12);--statement-info-text:#FFF8EC;--statement-info-badge-bg:#1D2B27;--statement-info-badge-text:#FFF8EC;--statement-info-badge-border:rgba(246,240,230,.12);--statement-warning-bg:rgba(239,68,68,.12);--statement-warning-border:rgba(239,68,68,.38);--statement-warning-text:#fecaca;--statement-warning-badge-bg:rgba(239,68,68,.24);--statement-warning-badge-text:#fca5a5;--statement-warning-badge-border:rgba(239,68,68,.35);--statement-tip-bg:rgba(34,197,94,.12);--statement-tip-border:rgba(34,197,94,.38);--statement-tip-text:#bbf7d0;--statement-tip-badge-bg:rgba(34,197,94,.24);--statement-tip-badge-text:#86efac;--statement-tip-badge-border:rgba(34,197,94,.35);--statement-note-bg:rgba(245,158,11,.12);--statement-note-border:rgba(245,158,11,.38);--statement-note-text:#fde68a;--statement-note-badge-bg:rgba(245,158,11,.24);--statement-note-badge-text:#fcd34d;--statement-note-badge-border:rgba(245,158,11,.35)}body[data-preview-theme="light"]{--statement-info-bg:#FFFDF8;--statement-info-border:#DED4C2;--statement-info-text:#17130F;--statement-info-badge-bg:#F7F1E6;--statement-info-badge-text:#17130F;--statement-info-badge-border:#DED4C2;--statement-warning-bg:#fee2e2;--statement-warning-border:#fca5a5;--statement-warning-text:#7f1d1d;--statement-warning-badge-bg:rgba(239,68,68,.18);--statement-warning-badge-text:#991b1b;--statement-warning-badge-border:rgba(239,68,68,.3);--statement-tip-bg:#dcfce7;--statement-tip-border:#86efac;--statement-tip-text:#14532d;--statement-tip-badge-bg:rgba(34,197,94,.18);--statement-tip-badge-text:#166534;--statement-tip-badge-border:rgba(34,197,94,.3);--statement-note-bg:#fef3c7;--statement-note-border:#facc15;--statement-note-text:#78350f;--statement-note-badge-bg:rgba(245,158,11,.18);--statement-note-badge-text:#92400e;--statement-note-badge-border:rgba(245,158,11,.3)}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;overflow:hidden;background:var(--lux-bg);color:var(--lux-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}button,input,select,textarea{font:inherit}button{cursor:pointer}.lux-scrollbar{scrollbar-color:var(--lux-scroll-thumb) var(--lux-scroll-track);scrollbar-gutter:stable;scrollbar-width:thin}.lux-scrollbar::-webkit-scrollbar{width:9px;height:9px}.lux-scrollbar::-webkit-scrollbar-track{background:var(--lux-scroll-track);border-radius:99px}.lux-scrollbar::-webkit-scrollbar-thumb{background:var(--lux-scroll-thumb);border:2px solid transparent;border-radius:99px;background-clip:padding-box}.lux-scrollbar:hover{scrollbar-color:var(--lux-scroll-thumb-hover) var(--lux-scroll-track)}.lux-scrollbar::-webkit-scrollbar-thumb:hover{background:var(--lux-scroll-thumb-hover);background-clip:padding-box}

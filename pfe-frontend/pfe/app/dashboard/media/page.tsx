@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import {
@@ -15,6 +15,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { getApiErrorMessage, mediaApi } from '@/lib/api'
+import { useTranslation } from '@/context/LanguageContext'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -25,15 +26,16 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatBytes, formatDate } from '@/lib/utils'
 import type { MediaAsset, MediaType } from '@/types'
+import type { TranslationKey } from '@/lib/translations'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-const typeFilters: { label: string; value: MediaType | 'ALL' }[] = [
-  { label: 'All', value: 'ALL' },
-  { label: 'Images', value: 'IMAGE' },
-  { label: 'Videos', value: 'VIDEO' },
-  { label: 'Audio', value: 'AUDIO' },
-  { label: 'Documents', value: 'DOCUMENT' },
+const typeFilterConfig: { labelKey: TranslationKey; value: MediaType | 'ALL' }[] = [
+  { labelKey: 'media_filter_all', value: 'ALL' },
+  { labelKey: 'media_filter_images', value: 'IMAGE' },
+  { labelKey: 'media_filter_videos', value: 'VIDEO' },
+  { labelKey: 'media_filter_audio', value: 'AUDIO' },
+  { labelKey: 'media_filter_documents', value: 'DOCUMENT' },
 ]
 
 const typeIcon: Record<MediaType, React.ElementType> = {
@@ -55,6 +57,7 @@ function assetUrl(asset: MediaAsset): string {
 }
 
 function PreviewModal({ asset, onClose }: { asset: MediaAsset; onClose: () => void }) {
+  const { t } = useTranslation()
   const url = assetUrl(asset)
 
   return (
@@ -76,11 +79,11 @@ function PreviewModal({ asset, onClose }: { asset: MediaAsset; onClose: () => vo
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-xl border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-3">
-            <span className="text-xs text-[var(--lux-muted-soft)] font-medium">File Size</span>
+            <span className="text-xs text-[var(--lux-muted-soft)] font-medium">{t('media_preview_file_size')}</span>
             <p className="text-sm font-bold text-[var(--lux-text-strong)]">{formatBytes(asset.size)}</p>
           </div>
           <div className="rounded-xl border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-3">
-            <span className="text-xs text-[var(--lux-muted-soft)] font-medium">Upload Date</span>
+            <span className="text-xs text-[var(--lux-muted-soft)] font-medium">{t('media_preview_upload_date')}</span>
             <p className="text-sm font-bold text-[var(--lux-text-strong)]">{formatDate(asset.createdAt)}</p>
           </div>
         </div>
@@ -94,10 +97,10 @@ function PreviewModal({ asset, onClose }: { asset: MediaAsset; onClose: () => vo
             variant="secondary"
             onClick={() => {
               navigator.clipboard.writeText(url)
-              toast.success('URL copied to clipboard')
+              toast.success(t('media_preview_copied'))
             }}
           >
-            Copy
+            {t('media_preview_copy')}
           </Button>
         </div>
       </div>
@@ -108,11 +111,17 @@ function PreviewModal({ asset, onClose }: { asset: MediaAsset; onClose: () => vo
 export default function MediaPage() {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
+  const { t } = useTranslation()
   const [typeFilter, setTypeFilter] = useState<MediaType | 'ALL'>('ALL')
   const [search, setSearch] = useState('')
   const [preview, setPreview] = useState<MediaAsset | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [assetPendingDelete, setAssetPendingDelete] = useState<MediaAsset | null>(null)
+
+  const typeFilters = useMemo(
+    () => typeFilterConfig.map((item) => ({ label: t(item.labelKey), value: item.value })),
+    [t],
+  )
 
   const { data, isLoading } = useQuery<MediaAsset[]>({
     queryKey: ['media', typeFilter, search],
@@ -128,16 +137,16 @@ export default function MediaPage() {
   const { mutate: uploadFile, isPending: uploading } = useMutation({
     mutationFn: (file: File) => mediaApi.upload(file),
     onSuccess: () => {
-      toast.success('File uploaded')
+      toast.success(t('media_uploaded'))
       qc.invalidateQueries({ queryKey: ['media'] })
     },
-    onError: (error) => toast.error(getApiErrorMessage(error, 'Upload failed')),
+    onError: (error) => toast.error(getApiErrorMessage(error, t('media_upload_failed'))),
   })
 
   const { mutate: deleteAsset } = useMutation({
     mutationFn: (id: string) => mediaApi.delete(id),
     onSuccess: () => {
-      toast.success('Deleted')
+      toast.success(t('media_deleted'))
       qc.invalidateQueries({ queryKey: ['media'] })
     },
   })
@@ -152,13 +161,13 @@ export default function MediaPage() {
   return (
     <div className="space-y-6 fade-up">
       <PageHeader
-        eyebrow="Asset Repository"
-        title="Media library"
-        description={`${assets.length} asset${assets.length !== 1 ? 's' : ''} available to your course workspace`}
+        eyebrow={t('media_eyebrow')}
+        title={t('media_title')}
+        description={t('media_count', { n: assets.length })}
         actions={
           <Button size="sm" onClick={() => fileRef.current?.click()} loading={uploading}>
             <Upload size={15} />
-            Upload file
+            {t('media_upload_btn')}
           </Button>
         }
       />
@@ -197,10 +206,11 @@ export default function MediaPage() {
         </div>
         <div className="text-center">
           <p className="text-sm font-bold text-[var(--lux-text-strong)]">
-            Drop files here or <span className="text-[var(--lux-primary-muted)] underline underline-offset-4">browse</span>
+            {t('media_drop_title', { browse: '' })}
+            <span className="text-[var(--lux-primary-muted)] underline underline-offset-4">{t('media_browse')}</span>
           </p>
           <p className="mt-1 text-xs font-medium text-[var(--lux-muted-soft)]">
-            Supports Images, Videos, Audio, and PDF/Office Documents
+            {t('media_drop_sub')}
           </p>
         </div>
       </div>
@@ -209,7 +219,7 @@ export default function MediaPage() {
         <div className="w-full sm:max-w-xs">
           <Input
             id="media-search"
-            placeholder="Search files..."
+            placeholder={t('media_search_placeholder')}
             icon={<Search size={14} />}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -219,7 +229,7 @@ export default function MediaPage() {
           items={typeFilters}
           value={typeFilter}
           onChange={setTypeFilter}
-          ariaLabel="Filter media by type"
+          ariaLabel={t('media_title')}
         />
       </div>
 
@@ -228,7 +238,7 @@ export default function MediaPage() {
           <Spinner />
         </div>
       ) : assets.length === 0 ? (
-        <EmptyState icon={<ImageIcon size={24} />} title="No media files" description="Upload images, videos, audio or documents to use across your courses" />
+        <EmptyState icon={<ImageIcon size={24} />} title={t('media_empty_title')} description={t('media_empty_desc')} />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {assets.map((asset) => {
@@ -273,7 +283,7 @@ export default function MediaPage() {
                       type="button"
                       onClick={() => setAssetPendingDelete(asset)}
                       className="grid h-7 w-7 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-red-500/12 hover:text-red-400"
-                      title="Delete asset"
+                      title={t('common_delete')}
                     >
                       <Trash2 size={13} />
                     </button>
@@ -289,9 +299,9 @@ export default function MediaPage() {
 
       <ConfirmDialog
         open={assetPendingDelete !== null}
-        title={assetPendingDelete ? `Delete "${assetPendingDelete.originalName}"?` : ''}
-        description="This action cannot be undone."
-        confirmLabel="Delete"
+        title={assetPendingDelete ? t('media_delete_confirm_title', { name: assetPendingDelete.originalName }) : ''}
+        description={t('media_delete_confirm_desc')}
+        confirmLabel={t('media_delete_confirm_btn')}
         onConfirm={() => {
           if (assetPendingDelete) deleteAsset(assetPendingDelete.id)
           setAssetPendingDelete(null)
@@ -301,4 +311,3 @@ export default function MediaPage() {
     </div>
   )
 }
-

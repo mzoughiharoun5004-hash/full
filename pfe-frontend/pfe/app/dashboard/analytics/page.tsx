@@ -9,6 +9,7 @@ import {
 } from 'recharts'
 import { analyticsApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -27,12 +28,6 @@ const tooltipStyle = {
   boxShadow: 'var(--lux-shadow)',
   padding: '10px 14px',
 }
-
-const dateRanges = [
-  { label: '7 days', value: 7 },
-  { label: '30 days', value: 30 },
-  { label: '90 days', value: 90 },
-]
 
 function KpiCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string | number; sub?: string; color: string
@@ -55,8 +50,15 @@ function KpiCard({ icon: Icon, label, value, sub, color }: {
 
 export default function AnalyticsPage() {
   const { isAdmin } = useAuth()
+  const { t } = useTranslation()
   const [range, setRange] = useState(30)
   const [drillDown, setDrillDown] = useState<ScenarioStat | null>(null)
+
+  const dateRanges = [
+    { label: t('analytics_range_7'), value: 7 },
+    { label: t('analytics_range_30'), value: 30 },
+    { label: t('analytics_range_90'), value: 90 },
+  ]
 
   const { data, isLoading } = useQuery<AnalyticsDashboard>({
     queryKey: ['analytics-full', isAdmin ? 'admin' : 'me', range],
@@ -70,18 +72,28 @@ export default function AnalyticsPage() {
   const scoreDistribution = getScoreDistribution(stats.topScenarios)
   const hasScores = scoreDistribution.some(item => item.count > 0)
 
+  const tableHeaders = [
+    t('analytics_table_scenario'),
+    t('analytics_table_status'),
+    t('analytics_table_attempts'),
+    t('analytics_table_completion'),
+    t('analytics_table_success'),
+    t('analytics_table_avg_score'),
+    '',
+  ]
+
   return (
     <div className="space-y-6 fade-up">
       <PageHeader
-        eyebrow="Performance Insights"
-        title="Analytics"
-        description={isAdmin ? 'Platform-wide scenario completion and user engagement metrics.' : 'Detailed metrics and completion rates for your scenarios.'}
+        eyebrow={t('analytics_eyebrow')}
+        title={t('analytics_title')}
+        description={isAdmin ? t('analytics_description_admin') : t('analytics_description_user')}
         actions={
           <SegmentedControl
             items={dateRanges}
             value={range}
             onChange={setRange}
-            ariaLabel="Analytics date range"
+            ariaLabel={t('analytics_title')}
           />
         }
       />
@@ -91,16 +103,16 @@ export default function AnalyticsPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard icon={Film} label="Total Scenarios" value={stats.totalScenarios ?? '-'} color="bg-[var(--lux-primary-soft)] text-[var(--lux-primary-muted)]" />
-            <KpiCard icon={Target} label="Avg Completion" value={`${stats.avgCompletionRate ?? 0}%`} sub="across active courses" color="bg-[var(--lux-primary-soft)] text-[var(--lux-primary-muted)]" />
-            <KpiCard icon={Activity} label="Total Attempts" value={stats.totalAttempts ?? '-'} color="bg-[var(--lux-gold-soft)] text-[var(--lux-gold)]" />
-            <KpiCard icon={TrendingUp} label="Avg Score" value={`${stats.avgScore ?? 0}%`} color="bg-[var(--lux-violet-soft)] text-[var(--lux-violet)]" />
+            <KpiCard icon={Film} label={t('analytics_kpi_total')} value={stats.totalScenarios ?? '-'} color="bg-[var(--lux-primary-soft)] text-[var(--lux-primary-muted)]" />
+            <KpiCard icon={Target} label={t('analytics_kpi_completion')} value={`${stats.avgCompletionRate ?? 0}%`} sub={t('analytics_kpi_sub')} color="bg-[var(--lux-primary-soft)] text-[var(--lux-primary-muted)]" />
+            <KpiCard icon={Activity} label={t('analytics_kpi_attempts')} value={stats.totalAttempts ?? '-'} color="bg-[var(--lux-gold-soft)] text-[var(--lux-gold)]" />
+            <KpiCard icon={TrendingUp} label={t('analytics_kpi_score')} value={`${stats.avgScore ?? 0}%`} color="bg-[var(--lux-violet-soft)] text-[var(--lux-violet)]" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <Card variant="glass" className="lg:col-span-2">
               <CardHeader>
-                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">Completions Over Time</h3>
+                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">{t('analytics_chart_completions')}</h3>
                 <BarChart2 size={16} className="text-[var(--lux-muted-soft)]" />
               </CardHeader>
               <CardBody>
@@ -134,7 +146,7 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex h-[230px] items-center justify-center text-xs text-[var(--lux-muted-soft)]">
-                    No trend data available for this date range
+                    {t('analytics_chart_no_trend')}
                   </div>
                 )}
               </CardBody>
@@ -142,7 +154,7 @@ export default function AnalyticsPage() {
 
             <Card variant="glass">
               <CardHeader>
-                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">Score Distribution</h3>
+                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">{t('analytics_chart_scores')}</h3>
               </CardHeader>
               <CardBody>
                 {hasScores ? (
@@ -164,7 +176,7 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex h-[230px] items-center justify-center text-xs text-[var(--lux-muted-soft)]">
-                    No score data recorded yet
+                    {t('analytics_chart_no_scores')}
                   </div>
                 )}
               </CardBody>
@@ -174,8 +186,8 @@ export default function AnalyticsPage() {
           <Card variant="glass">
             <CardHeader>
               <div>
-                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">Per-Scenario Performance</h3>
-                <p className="mt-0.5 text-xs text-[var(--lux-muted-soft)]">Click a scenario row to view detailed breakdown</p>
+                <h3 className="text-sm font-bold text-[var(--lux-text-strong)]">{t('analytics_table_title')}</h3>
+                <p className="mt-0.5 text-xs text-[var(--lux-muted-soft)]">{t('analytics_table_subtitle')}</p>
               </div>
             </CardHeader>
             <CardBody className="pt-0">
@@ -183,7 +195,7 @@ export default function AnalyticsPage() {
                 <table className="min-w-[820px] w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--lux-line)]/80">
-                      {['Scenario', 'Status', 'Attempts', 'Completion', 'Success', 'Avg Score', ''].map((h, i) => (
+                      {tableHeaders.map((h, i) => (
                         <th key={i} className="text-left text-xs font-bold uppercase tracking-wider text-[var(--lux-muted-soft)] pb-3 pr-4">{h}</th>
                       ))}
                     </tr>
@@ -212,7 +224,7 @@ export default function AnalyticsPage() {
                       </tr>
                     ))}
                     {!stats.topScenarios?.length && (
-                      <tr><td colSpan={7} className="py-12 text-center text-[var(--lux-muted-soft)] text-xs font-medium">No scenario performance metrics recorded yet</td></tr>
+                      <tr><td colSpan={7} className="py-12 text-center text-[var(--lux-muted-soft)] text-xs font-medium">{t('analytics_table_empty')}</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -226,13 +238,13 @@ export default function AnalyticsPage() {
         <Modal open onClose={() => setDrillDown(null)} title={drillDown.title} size="md">
           <div className="grid grid-cols-2 gap-3.5">
             {[
-              { label: 'Completions', value: drillDown.completions },
-              { label: 'Attempts', value: drillDown.attempts ?? drillDown.completions },
-              { label: 'Completion Rate', value: `${drillDown.completionRate ?? 0}%` },
-              { label: 'Success Rate', value: `${drillDown.successRate ?? 0}%` },
-              { label: 'Avg Score', value: `${drillDown.avgScore}%` },
-              { label: 'Avg Time', value: drillDown.avgTime ? `${drillDown.avgTime}m` : '-' },
-              { label: 'Status', value: <StatusBadge status={drillDown.status} /> },
+              { label: t('analytics_detail_completions'), value: drillDown.completions },
+              { label: t('analytics_detail_attempts'), value: drillDown.attempts ?? drillDown.completions },
+              { label: t('analytics_detail_completion_rate'), value: `${drillDown.completionRate ?? 0}%` },
+              { label: t('analytics_detail_success_rate'), value: `${drillDown.successRate ?? 0}%` },
+              { label: t('analytics_detail_avg_score'), value: `${drillDown.avgScore}%` },
+              { label: t('analytics_detail_avg_time'), value: drillDown.avgTime ? `${drillDown.avgTime}m` : '-' },
+              { label: t('analytics_detail_status'), value: <StatusBadge status={drillDown.status} /> },
             ].map(({ label, value }) => (
               <div key={label} className="bg-[var(--lux-surface-soft)] border border-[var(--lux-line)]/80 rounded-xl p-3.5">
                 <p className="text-xs text-[var(--lux-muted-soft)] mb-1 font-semibold uppercase tracking-wider">{label}</p>
@@ -245,4 +257,3 @@ export default function AnalyticsPage() {
     </div>
   )
 }
-

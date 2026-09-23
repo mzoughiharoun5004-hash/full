@@ -10,26 +10,27 @@ describe('PexelsMediaProvider', () => {
   it('selects a playable Pexels video and stores attribution metadata', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        videos: [
-          {
-            url: 'https://www.pexels.com/video/123/',
-            user: { name: 'Ada Author', url: 'https://www.pexels.com/@ada/' },
-            video_files: [
-              {
-                file_type: 'video/mp4',
-                link: 'https://videos.pexels.com/large.mp4',
-                width: 1920,
-              },
-              {
-                file_type: 'video/mp4',
-                link: 'https://videos.pexels.com/small.mp4',
-                width: 640,
-              },
-            ],
-          },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          videos: [
+            {
+              url: 'https://www.pexels.com/video/123/',
+              user: { name: 'Ada Author', url: 'https://www.pexels.com/@ada/' },
+              video_files: [
+                {
+                  file_type: 'video/mp4',
+                  link: 'https://videos.pexels.com/large.mp4',
+                  width: 1920,
+                },
+                {
+                  file_type: 'video/mp4',
+                  link: 'https://videos.pexels.com/small.mp4',
+                  width: 640,
+                },
+              ],
+            },
+          ],
+        }),
     }) as never;
     const provider = new PexelsMediaProvider({
       get: jest.fn().mockReturnValue('test-key'),
@@ -62,15 +63,19 @@ describe('PexelsMediaProvider', () => {
   it('reuses a cached result for a repeated identical query instead of calling Pexels again', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        photos: [
-          {
-            url: 'https://www.pexels.com/photo/456/',
-            user: { name: 'Sam Shooter', url: 'https://www.pexels.com/@sam/' },
-            src: { large2x: 'https://images.pexels.com/large2x.jpg' },
-          },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          photos: [
+            {
+              url: 'https://www.pexels.com/photo/456/',
+              user: {
+                name: 'Sam Shooter',
+                url: 'https://www.pexels.com/@sam/',
+              },
+              src: { large2x: 'https://images.pexels.com/large2x.jpg' },
+            },
+          ],
+        }),
     });
     global.fetch = fetchMock as never;
     const provider = new PexelsMediaProvider({
@@ -100,15 +105,16 @@ describe('PexelsMediaProvider', () => {
       inFlight -= 1;
       return {
         ok: true,
-        json: async () => ({
-          photos: [
-            {
-              url: 'https://www.pexels.com/photo/1/',
-              user: {},
-              src: { large2x: 'https://images.pexels.com/x.jpg' },
-            },
-          ],
-        }),
+        json: () =>
+          Promise.resolve({
+            photos: [
+              {
+                url: 'https://www.pexels.com/photo/1/',
+                user: {},
+                src: { large2x: 'https://images.pexels.com/x.jpg' },
+              },
+            ],
+          }),
       };
     });
     global.fetch = fetchMock as never;

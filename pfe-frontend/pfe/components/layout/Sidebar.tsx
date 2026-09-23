@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 import { SidebarToggleButton } from './SidebarToggleButton'
@@ -22,6 +23,7 @@ import {
   utilityNavItems,
   type DashboardNavItem,
 } from './navConfig'
+import type { TranslationKey } from '@/lib/translations'
 
 interface SidebarProps {
   collapsed: boolean
@@ -38,18 +40,24 @@ interface NavLinkProps extends DashboardNavItem {
 
 function NavLink({
   href,
+  labelKey,
   label,
   icon: Icon,
+  descriptionKey,
   description,
   active,
   collapsed,
   onNavigate,
 }: NavLinkProps) {
+  const { t } = useTranslation()
+  const displayLabel = t(labelKey) || label
+  const displayDesc = descriptionKey ? t(descriptionKey) : description
+
   return (
     <Link
       href={href}
       onClick={onNavigate}
-      aria-label={label}
+      aria-label={displayLabel}
       className={cn(
         'group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-200 select-none',
         collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
@@ -60,27 +68,25 @@ function NavLink({
     >
       <Icon size={18} className={cn('flex-shrink-0 transition-transform duration-200 group-hover:scale-110', active ? 'text-[var(--lux-primary-muted)]' : '')} />
 
-      {/* Smooth text transition for expanded mode */}
       <span
         className={cn(
           'transition-all duration-200 ease-in-out whitespace-nowrap overflow-hidden',
           collapsed ? 'max-w-0 opacity-0 w-0' : 'max-w-xs opacity-100 flex-1 min-w-0 truncate',
         )}
       >
-        {label}
+        {displayLabel}
       </span>
 
       {!collapsed && active && (
         <ChevronRight size={14} className="flex-shrink-0 text-[var(--lux-primary-muted)]" />
       )}
 
-      {/* Non-clipped Floating Tooltip for collapsed mode */}
       {collapsed && (
         <div className="pointer-events-none fixed left-[80px] z-[60] hidden group-hover:flex group-focus-visible:flex items-center animate-in fade-in zoom-in-95 duration-150">
           <div className="whitespace-nowrap rounded-xl border border-[var(--lux-line-strong)] bg-[var(--lux-surface)]/95 backdrop-blur-xl px-3.5 py-2 text-xs shadow-2xl">
-            <p className="font-extrabold text-[var(--lux-text-strong)]">{label}</p>
-            {description && (
-              <p className="mt-0.5 text-[11px] font-medium text-[var(--lux-muted-soft)]">{description}</p>
+            <p className="font-extrabold text-[var(--lux-text-strong)]">{displayLabel}</p>
+            {displayDesc && (
+              <p className="mt-0.5 text-[11px] font-medium text-[var(--lux-muted-soft)]">{displayDesc}</p>
             )}
           </div>
         </div>
@@ -90,30 +96,34 @@ function NavLink({
 }
 
 function NavSection({
+  labelKey,
   label,
   items,
   pathname,
   collapsed,
   onNavigate,
 }: {
+  labelKey?: TranslationKey
   label?: string
   items: DashboardNavItem[]
   pathname: string
   collapsed: boolean
   onNavigate?: () => void
 }) {
+  const { t } = useTranslation()
   if (items.length === 0) return null
+  const displayLabel = labelKey ? t(labelKey) : label
 
   return (
     <div className="space-y-1">
-      {label && (
+      {displayLabel && (
         <p
           className={cn(
             'px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-[var(--lux-muted-soft)] transition-all duration-200 overflow-hidden whitespace-nowrap',
             collapsed ? 'max-h-0 py-0 opacity-0' : 'max-h-8 opacity-100',
           )}
         >
-          {label}
+          {displayLabel}
         </p>
       )}
       {items.map((item) => (
@@ -130,6 +140,7 @@ function NavSection({
 }
 
 function BrandMark({ collapsed }: { collapsed: boolean }) {
+  const { t } = useTranslation()
   return (
     <Link
       href="/"
@@ -148,14 +159,14 @@ function BrandMark({ collapsed }: { collapsed: boolean }) {
         )}
       >
         <p className="truncate text-sm font-extrabold tracking-tight text-[var(--lux-text-strong)]">SupScenario</p>
-        <p className="truncate text-[11px] font-medium text-[var(--lux-muted-soft)]">Course authoring</p>
+        <p className="truncate text-[11px] font-medium text-[var(--lux-muted-soft)]">{t('nav_course_authoring')}</p>
       </div>
 
       {collapsed && (
         <div className="pointer-events-none fixed left-[80px] z-[60] hidden group-hover:flex items-center animate-in fade-in zoom-in-95 duration-150">
           <div className="whitespace-nowrap rounded-xl border border-[var(--lux-line-strong)] bg-[var(--lux-surface)]/95 backdrop-blur-xl px-3 py-1.5 text-xs shadow-2xl">
             <p className="font-extrabold text-[var(--lux-text-strong)]">SupScenario</p>
-            <p className="text-[11px] font-medium text-[var(--lux-muted-soft)]">Course authoring platform</p>
+            <p className="text-[11px] font-medium text-[var(--lux-muted-soft)]">{t('nav_course_authoring_platform')}</p>
           </div>
         </div>
       )}
@@ -193,6 +204,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname()
   const { user, isAdmin, logout } = useAuth()
+  const { t } = useTranslation()
   const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim()
   const isCollapsedMode = collapsed && !mobile
   const widthClass = isCollapsedMode ? 'w-[72px]' : 'w-60'
@@ -206,7 +218,6 @@ export function Sidebar({
         widthClass,
       )}
     >
-      {/* Header section with brand & collapse/expand toggle */}
       <div className={cn(
         'flex h-[60px] items-center border-b border-[var(--lux-line)] px-3 transition-all duration-200',
         isCollapsedMode ? 'justify-center gap-1' : 'justify-between gap-2',
@@ -214,11 +225,11 @@ export function Sidebar({
         <BrandMark collapsed={isCollapsedMode} />
 
         {mobile ? (
-          <IconButton label="Close navigation" icon={X} onClick={onCloseMobile} />
+          <IconButton label={t('nav_close')} icon={X} onClick={onCloseMobile} />
         ) : (
           <SidebarToggleButton
             direction={isCollapsedMode ? 'expand' : 'collapse'}
-            label={isCollapsedMode ? 'Expand sidebar' : 'Collapse sidebar'}
+            label={isCollapsedMode ? t('nav_expand') : t('nav_collapse')}
             shortcut="Ctrl+["
             onClick={onToggleCollapsed}
             className="flex-shrink-0"
@@ -226,7 +237,6 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Navigation body */}
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3 lux-scrollbar">
         <div className="space-y-3">
           <NavSection
@@ -239,7 +249,7 @@ export function Sidebar({
           <div className="h-px bg-[var(--lux-line)] my-1" />
 
           <NavSection
-            label="Workspace"
+            labelKey="nav_workspace"
             items={primaryNavItems}
             pathname={pathname}
             collapsed={isCollapsedMode}
@@ -250,7 +260,7 @@ export function Sidebar({
             <>
               <div className="h-px bg-[var(--lux-line)] my-1" />
               <NavSection
-                label="Admin"
+                labelKey="nav_admin"
                 items={adminNavItems}
                 pathname={pathname}
                 collapsed={isCollapsedMode}
@@ -270,7 +280,6 @@ export function Sidebar({
         </div>
       </nav>
 
-      {/* User profile footer */}
       <div className="border-t border-[var(--lux-line)] px-3 py-3">
         <div
           className={cn(
@@ -280,7 +289,6 @@ export function Sidebar({
         >
           <Avatar firstName={user?.firstName} lastName={user?.lastName} name={fullName} size="sm" />
 
-          {/* Expanded user details */}
           <div
             className={cn(
               'transition-all duration-200 ease-in-out whitespace-nowrap overflow-hidden flex items-center gap-2 min-w-0 flex-1',
@@ -295,14 +303,13 @@ export function Sidebar({
               type="button"
               onClick={logout}
               className="grid h-8 w-8 place-items-center rounded-xl text-[var(--lux-muted-soft)] transition-colors hover:bg-red-500/12 hover:text-red-400"
-              title="Sign out"
-              aria-label="Sign out"
+              title={t('nav_sign_out')}
+              aria-label={t('nav_sign_out')}
             >
               <LogOut size={16} />
             </button>
           </div>
 
-          {/* Floating Collapsed Profile Tooltip */}
           {isCollapsedMode && (
             <div className="pointer-events-none fixed left-[80px] bottom-3 z-[60] hidden group-hover:flex group-focus-visible:flex items-center animate-in fade-in zoom-in-95 duration-150">
               <div className="pointer-events-auto w-56 rounded-2xl border border-[var(--lux-line-strong)] bg-[var(--lux-surface)]/95 backdrop-blur-xl p-3.5 shadow-2xl">
@@ -319,7 +326,7 @@ export function Sidebar({
                     className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-[var(--lux-muted)] hover:bg-[var(--lux-primary-soft)] hover:text-[var(--lux-text-strong)] transition-colors"
                   >
                     <Settings size={14} />
-                    Settings
+                    {t('nav_settings')}
                   </Link>
                   <button
                     type="button"
@@ -327,7 +334,7 @@ export function Sidebar({
                     className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-red-400 hover:bg-red-500/12 transition-colors"
                   >
                     <LogOut size={14} />
-                    Sign out
+                    {t('nav_sign_out')}
                   </button>
                 </div>
               </div>
@@ -338,4 +345,3 @@ export function Sidebar({
     </aside>
   )
 }
-

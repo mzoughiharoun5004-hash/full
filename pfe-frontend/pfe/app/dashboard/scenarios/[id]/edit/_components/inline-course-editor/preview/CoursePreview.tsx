@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, GitBranch, X, Moon, Sun } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { SidebarToggleButton } from '@/components/layout/SidebarToggleButton'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/context/AuthContext'
+import { getApiErrorMessage, scormApi } from '@/lib/api'
 import type { CourseDocument, CoursePage } from '@/types'
 import {
-  authorNameFrom,
   branchingDecisionBlockTypes,
-  createManifestPreview,
-  normalizeCourseDocument,
 } from '../courseEditorModel'
 import { PreviewPage } from './PreviewPage'
 import { previewLessonToPage } from './previewHelpers'
@@ -19,8 +17,20 @@ function pageHasBranchingContent(page: CoursePage): boolean {
   return (page.blocks ?? []).some((block) => branchingDecisionBlockTypes.includes(block.type))
 }
 
-export function CoursePreview({ document, onClose, onUpdateDocument }: { document: CourseDocument; onClose: () => void; onUpdateDocument: (updater: (document: CourseDocument) => CourseDocument) => void }) {
-  const { user } = useAuth()
+export function CoursePreview({
+  document,
+  scenarioId,
+  onClose,
+  onUpdateDocument,
+  onSaveBeforeExport,
+}: {
+  document: CourseDocument
+  scenarioId?: string
+  onClose: () => void
+  onUpdateDocument: (updater: (document: CourseDocument) => CourseDocument) => void
+  onSaveBeforeExport: () => Promise<boolean>
+}) {
+  const [exporting, setExporting] = useState(false)
   const pages = useMemo(() => document.pages.length ? document.pages : (document.lessons ?? []).map(previewLessonToPage), [document.lessons, document.pages])
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -85,25 +95,40 @@ export function CoursePreview({ document, onClose, onUpdateDocument }: { documen
             </button>
             <button
               type="button"
-              onClick={() => {
-                const courseDocument = normalizeCourseDocument(document, authorNameFrom(user));
-                const scormManifest = createManifestPreview(courseDocument);
-                const blob = new Blob([scormManifest], { type: 'application/xml' });
-                const url = URL.createObjectURL(blob);
-                const a = window.document.createElement('a');
-                a.href = url;
-                a.download = `${document.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xml`;
-                window.document.body.appendChild(a);
-                a.click();
-                window.document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+              onClick={async () => {
+                if (!scenarioId) {
+                  toast.error('Save the course before exporting.')
+                  return
+                }
+                setExporting(true)
+                try {
+                  const saved = await onSaveBeforeExport()
+                  if (!saved) {
+                    toast.error('Could not save the latest changes. Please retry before exporting.')
+                    return
+                  }
+                  const response = await scormApi.export(scenarioId)
+                  const url = URL.createObjectURL(response.data)
+                  const a = window.document.createElement('a')
+                  a.href = url
+                  a.download = `${document.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.zip`
+                  window.document.body.appendChild(a)
+                  a.click()
+                  window.document.body.removeChild(a)
+                  URL.revokeObjectURL(url)
+                } catch (error) {
+                  toast.error(getApiErrorMessage(error, 'SCORM export failed'))
+                } finally {
+                  setExporting(false)
+                }
               }}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--lux-line)] bg-[var(--lux-primary)] px-3 text-xs font-semibold text-[var(--lux-text-strong)] transition-colors hover:bg-[var(--lux-primary-hover)]"
-              title="Download SCORM manifest"
-              aria-label="Download SCORM manifest"
+              disabled={exporting || !scenarioId}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--lux-line)] bg-[var(--lux-primary)] px-3 text-xs font-semibold text-[var(--lux-text-strong)] transition-colors hover:bg-[var(--lux-primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              title="Download SCORM package"
+              aria-label="Download SCORM package"
             >
               <Download size={14} />
-              Download
+              {exporting ? 'Exporting…' : 'Download'}
             </button>
             <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-[var(--lux-muted)] hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text-strong)]" aria-label="Close preview">
               <X size={18} />

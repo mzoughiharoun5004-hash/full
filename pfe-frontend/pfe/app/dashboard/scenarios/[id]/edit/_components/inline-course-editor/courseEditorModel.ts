@@ -222,7 +222,7 @@ const defaultTheme: CourseTheme = {
 
 const defaultPublish: CoursePublishSettings = {
   target: 'lms',
-  lmsStandard: 'scorm_1_2',
+  lmsStandard: 'scorm_2004',
   tracking: 'completion_and_score',
   completionPercentage: 100,
   passingScore: 80,
@@ -419,7 +419,7 @@ export function createEmptyCourseDocument(title: string, authorName: string): Co
     settings: {
       completionMode: 'pages',
       passingScore: 80,
-      scormVersion: '1.2',
+      scormVersion: '2004',
       completionPercentage: 100,
       requireQuizPass: false,
     },
@@ -502,7 +502,7 @@ export function syncCourseDocument(document: CourseDocument): CourseDocument {
     settings: {
       completionMode: settings.completionMode === 'score' ? 'score' : 'pages',
       passingScore: percentageOrDefault(settings.passingScore, 80),
-      scormVersion: settings.scormVersion === '2004' ? '2004' : '1.2',
+      scormVersion: settings.scormVersion === '1.2' ? '1.2' : '2004',
       completionPercentage: percentageOrDefault(settings.completionPercentage, 100, 1),
       requireQuizPass: Boolean(settings.requireQuizPass),
     },
@@ -904,7 +904,7 @@ export function createManifestPreview(document: CourseDocument) {
 
 function createDefaultScormSettings(title: string, description: string): ScormSettings {
   return {
-    version: 'scorm_1_2',
+    version: 'scorm_2004_3rd',
     completionTrigger: 'viewed_all',
     customCondition: '',
     passingScore: 80,

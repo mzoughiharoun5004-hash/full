@@ -159,6 +159,10 @@ export class ScormPreviewService {
     const metadata = await this.getUploadedScormPackage(packageId);
     const title = this.escHtml(metadata.title || metadata.originalName);
     const launchUrl = this.escHtml(metadata.fileUrl);
+    const launchPath = this.escHtml(metadata.launchPath);
+    // Embedded verbatim into the inline script below (not into HTML), so it
+    // only needs JS-string escaping via JSON.stringify, not escHtml.
+    const packageIdLiteral = JSON.stringify(metadata.id);
 
     return `<!doctype html>
 <html lang="en">
@@ -167,32 +171,63 @@ export class ScormPreviewService {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${title}</title>
   <style>
-    :root{color-scheme:dark;--bg:#0f171b;--surface:#162220;--line:rgba(246,240,230,.14);--text:#fff8ec;--muted:#b9ad9c;--primary:#83bfa1}
+    :root{
+      /* Mirrors the app's real --lux-* tokens (app/globals.css, dark palette) —
+         copied rather than inherited since this document is served from the
+         backend origin and rendered inside a cross-origin iframe. */
+      color-scheme:dark;
+      --bg:#090e13;--bg-alt:#0d151c;--surface:#121e28;--surface-soft:#182836;--elevated:#203344;
+      --text:#e2e8f0;--text-strong:#f8fafc;--muted:#94a3b8;--muted-soft:#64748b;
+      --line:#1b2a38;--line-strong:#273d52;
+      --primary:#10b981;--primary-hover:#059669;--primary-soft:rgba(16,185,129,.15);--primary-muted:#34d399;
+      --info:#38bdf8;--info-soft:rgba(56,189,248,.15);
+      --gold:#f59e0b;--gold-soft:rgba(245,158,11,.15);
+      --danger:#f87171;--danger-soft:rgba(239,68,68,.12);
+    }
     *{box-sizing:border-box}
-    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:"Segoe UI Variable","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
     .viewer{display:grid;height:100%;grid-template-rows:auto minmax(0,1fr);background:var(--bg)}
-    .viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);background:var(--surface);padding:10px 14px}
+    .viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);background:var(--surface);padding:10px 16px}
+    .viewer-id{display:flex;align-items:center;gap:10px;min-width:0}
+    .viewer-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:30px;height:30px;border-radius:9px;background:var(--primary-soft);color:var(--primary-muted)}
     .viewer-title{min-width:0}
-    .viewer-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
-    .viewer-title span{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:11px}
-    .viewer-status{border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--primary);font-size:11px;font-weight:800;white-space:nowrap}
+    .viewer-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;letter-spacing:-.01em;color:var(--text-strong)}
+    .viewer-title span{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .viewer-status{position:relative;display:flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--line);border-radius:999px;padding:5px 11px 5px 9px;color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap;background:var(--surface-soft);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:color .2s ease,border-color .2s ease,background-color .2s ease}
+    .viewer-status .dot{position:relative;width:6px;height:6px;border-radius:999px;background:currentColor}
+    .viewer-status[data-tone="progress"] .dot,.viewer-status[data-tone="success"] .dot,.viewer-status[data-tone="warning"] .dot,.viewer-status[data-tone="danger"] .dot{box-shadow:0 0 8px color-mix(in srgb,currentColor 80%,transparent)}
+    .viewer-status .dot::before{content:'';position:absolute;inset:-4px;border-radius:999px;background:currentColor;opacity:0}
+    .viewer-status[data-tone="progress"] .dot::before,.viewer-status[data-tone="success"] .dot::before{animation:viewer-status-ping 1.6s cubic-bezier(0,0,.2,1) infinite}
+    @keyframes viewer-status-ping{0%{opacity:.5;transform:scale(.6)}75%,100%{opacity:0;transform:scale(1.8)}}
+    @media (prefers-reduced-motion: reduce){.viewer-status[data-tone="progress"] .dot::before,.viewer-status[data-tone="success"] .dot::before{animation:none}}
+    .viewer-status[data-tone="progress"]{color:var(--info);border-color:color-mix(in srgb,var(--info) 35%,var(--line));background:var(--info-soft)}
+    .viewer-status[data-tone="success"]{color:var(--primary-muted);border-color:color-mix(in srgb,var(--primary) 40%,var(--line));background:var(--primary-soft)}
+    .viewer-status[data-tone="warning"]{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 40%,var(--line));background:var(--gold-soft)}
+    .viewer-status[data-tone="danger"]{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line));background:var(--danger-soft)}
     iframe{display:block;width:100%;height:100%;border:0;background:#fff}
   </style>
 </head>
 <body>
   <main class="viewer">
     <header class="viewer-bar">
-      <div class="viewer-title">
-        <strong>${title}</strong>
-        <span>${this.escHtml(metadata.launchPath)}</span>
+      <div class="viewer-id">
+        <span class="viewer-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        </span>
+        <div class="viewer-title">
+          <strong>${title}</strong>
+          <span>${launchPath}</span>
+        </div>
       </div>
-      <div class="viewer-status" id="scorm-status">SCORM ready</div>
+      <div class="viewer-status" id="scorm-status" data-tone="neutral"><span class="dot"></span><span id="scorm-status-label">Not started</span></div>
     </header>
     <iframe id="scorm-frame" src="${launchUrl}" allow="fullscreen; autoplay; clipboard-read; clipboard-write" allowfullscreen></iframe>
   </main>
   <script>
     (function(){
+      var packageId=${packageIdLiteral};
       var statusEl=document.getElementById('scorm-status');
+      var labelEl=document.getElementById('scorm-status-label');
       var data={
         'cmi.core.lesson_status':'not attempted',
         'cmi.core.score.raw':'',
@@ -208,25 +243,73 @@ export class ScormPreviewService {
         'cmi.location':''
       };
       var lastError='0';
-      function setStatus(value){if(statusEl)statusEl.textContent=value;}
+
+      var TONE_BY_STATUS={
+        'not attempted':{tone:'neutral',label:'Not started'},
+        'unknown':{tone:'neutral',label:'Not started'},
+        'browsed':{tone:'warning',label:'Browsed'},
+        'incomplete':{tone:'progress',label:'In progress'},
+        'completed':{tone:'success',label:'Completed'},
+        'passed':{tone:'success',label:'Passed'},
+        'failed':{tone:'danger',label:'Failed'}
+      };
+
+      function currentStatus(){
+        return (data['cmi.core.lesson_status']||data['cmi.completion_status']||'not attempted').toLowerCase();
+      }
+
+      function paint(){
+        var status=currentStatus();
+        var success=(data['cmi.success_status']||'').toLowerCase();
+        var effective=success==='passed'?'passed':success==='failed'?'failed':status;
+        var cfg=TONE_BY_STATUS[effective]||{tone:'neutral',label:'Not started'};
+        if(statusEl)statusEl.dataset.tone=cfg.tone;
+        if(labelEl)labelEl.textContent=cfg.label;
+      }
+
+      function notifyParent(eventName){
+        try{
+          window.parent.postMessage({
+            source:'scorm-viewer',
+            packageId:packageId,
+            event:eventName,
+            status:currentStatus(),
+            successStatus:data['cmi.success_status']||'unknown',
+            scoreRaw:data['cmi.core.score.raw']||data['cmi.score.raw']||'',
+            scoreMax:data['cmi.core.score.max']||data['cmi.score.max']||''
+          },'*');
+        }catch(err){/* best-effort only */}
+      }
+
       function getValue(key){lastError='0';return Object.prototype.hasOwnProperty.call(data,key)?String(data[key]):'';}
-      function setValue(key,value){lastError='0';data[key]=String(value);if(/lesson_status|completion_status|success_status/.test(key)){setStatus(String(value));}return 'true';}
+      function setValue(key,value){
+        lastError='0';
+        data[key]=String(value);
+        if(/lesson_status|completion_status|success_status|score/.test(key)){
+          paint();
+          notifyParent('setvalue');
+        }
+        return 'true';
+      }
+
+      paint();
+
       window.API={
-        LMSInitialize:function(){lastError='0';setStatus('SCORM 1.2 active');return 'true';},
-        LMSFinish:function(){lastError='0';setStatus('Finished');return 'true';},
+        LMSInitialize:function(){lastError='0';notifyParent('initialize');return 'true';},
+        LMSFinish:function(){lastError='0';notifyParent('finish');return 'true';},
         LMSGetValue:getValue,
         LMSSetValue:setValue,
-        LMSCommit:function(){lastError='0';return 'true';},
+        LMSCommit:function(){lastError='0';notifyParent('commit');return 'true';},
         LMSGetLastError:function(){return lastError;},
         LMSGetErrorString:function(code){return code==='0'?'No error':'SCORM runtime error';},
         LMSGetDiagnostic:function(code){return 'Diagnostic '+(code||lastError);}
       };
       window.API_1484_11={
-        Initialize:function(){lastError='0';setStatus('SCORM 2004 active');return 'true';},
-        Terminate:function(){lastError='0';setStatus('Finished');return 'true';},
+        Initialize:function(){lastError='0';notifyParent('initialize');return 'true';},
+        Terminate:function(){lastError='0';notifyParent('finish');return 'true';},
         GetValue:getValue,
         SetValue:setValue,
-        Commit:function(){lastError='0';return 'true';},
+        Commit:function(){lastError='0';notifyParent('commit');return 'true';},
         GetLastError:function(){return lastError;},
         GetErrorString:function(code){return code==='0'?'No error':'SCORM runtime error';},
         GetDiagnostic:function(code){return 'Diagnostic '+(code||lastError);}

@@ -20,7 +20,7 @@ import {
   scenarioViewHref,
   userHasScenarioEditShare,
 } from '@/lib/scenarioActions'
-import type { Scenario } from '@/types'
+import type { Scenario, ScenarioStatus } from '@/types'
 
 interface Ctx { id: string }
 
@@ -106,7 +106,10 @@ export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> })
     }),
   )
   const hasEditShare = userHasScenarioEditShare(scenario.shares, user?.id)
-  const scenarioStatus = scenario.status ?? scenario.statut
+  // Backend only ever sends `statut` (lowercase, e.g. 'brouillon'); `status` is never
+  // populated by the API despite the type saying otherwise — normalize here so the
+  // badge below shows the real status instead of rendering blank.
+  const scenarioStatus = String(scenario.status ?? scenario.statut ?? '').toUpperCase() as ScenarioStatus
   const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenarioStatus)
   const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({
     isOwner,
@@ -142,7 +145,7 @@ export default function ScenarioDetailPage({ params }: { params: Promise<Ctx> })
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-100 truncate">{scenario.title ?? scenario.titre}</h1>
-            <StatusBadge status={scenario.status} />
+            <StatusBadge status={scenarioStatus} />
           </div>
           <p className="text-sm text-slate-500 mt-1">
             Created on {formatDate(scenario.createdAt ?? scenario.dateCreation)}

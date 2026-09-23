@@ -1,5 +1,5 @@
 import axios, { type AxiosResponse } from 'axios'
-import { clearAuth } from '@/lib/auth'
+import { clearAuth, normalizeUser } from '@/lib/auth'
 import type {
   AiCourseBrief,
   AiCourseOutline,
@@ -15,13 +15,13 @@ import {
   parseAiCourseOutline,
   parseCourseDocument,
   parseMediaAsset,
+  parseMediaList,
   parseQuiz,
   parseScenario,
   parseScenarioComment,
   parseScenarioShare,
   parseUser,
   parsePaginatedScenarios,
-  parsePaginatedMedia,
 } from '@/lib/schemas'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -100,6 +100,38 @@ function checked<R extends AxiosResponse>(response: R, parse: (data: unknown) =>
   return response
 }
 
+/**
+ * Like `checked`, but for endpoints where the backend payload genuinely isn't
+ * shaped like what callers need (media resources use lowercase `type`s and
+ * different field names). `transform`'s result actually replaces
+ * `response.data`, so callers get the translated value instead of the raw
+ * backend payload. `transform` itself still falls back to the raw input on a
+ * schema mismatch (see createSchemaParser), so this is never any less safe
+ * than `checked`.
+ */
+function transformed<R extends AxiosResponse, T>(response: R, transform: (data: unknown) => T): Omit<R, 'data'> & { data: T } {
+  return { ...response, data: transform(response.data) }
+}
+
+/**
+ * GET /users and the single-user write endpoints below return raw TypeORM
+ * entities: `role` is the full `{ id, name }` Role relation (lowercase
+ * name, e.g. 'admin' / 'teacher'), and the creation timestamp is
+ * `dateInscription`, not `createdAt`. normalizeUser already translates both
+ * correctly — it's the same helper the login/"me" flow relies on — so route
+ * these responses through it instead of leaking the raw shape into the
+ * Users page. That leak was the actual cause of the page being broken:
+ * `user.role === 'ADMIN'` never matched an object, and
+ * `<StatusBadge status={user.role} />` was handed an object where it needs
+ * a string (React throws rendering an object as a child).
+ */
+function normalizeUserResponse(data: unknown) {
+  return normalizeUser(data as Parameters<typeof normalizeUser>[0])
+}
+function normalizeUsersResponse(data: unknown) {
+  return Array.isArray(data) ? data.map(normalizeUserResponse) : []
+}
+
 export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data).then((response) => {
@@ -119,7 +151,7 @@ export const authApi = {
 }
 
 export const usersApi = {
-  getAll: () => api.get('/users'),
+  getAll: () => api.get('/users').then((response) => transformed(response, normalizeUsersResponse)),
   search: (query: string) => api.get('/users/search', { params: { q: query } }),
   create: (data: {
     firstName: string
@@ -127,7 +159,7 @@ export const usersApi = {
     email: string
     password: string
     role: string
-  }) => api.post('/users/managed', data).then((response) => checked(response, parseUser)),
+  }) => api.post('/users/managed', data).then((response) => transformed(response, normalizeUserResponse)),
   getMe: () => api.get('/users/me').then((response) => checked(response, parseUser)),
   updateMe: (data: Partial<{ firstName: string; lastName: string; email: string; password?: string }>) =>
     api.put('/users/me', data).then((response) => checked(response, parseUser)),
@@ -137,9 +169,9 @@ export const usersApi = {
     email: string
     password: string
     role: string
-  }>) => api.put(`/users/${id}`, data).then((response) => checked(response, parseUser)),
+  }>) => api.put(`/users/${id}`, data).then((response) => transformed(response, normalizeUserResponse)),
   updateRole: (id: string, role: string) =>
-    api.put(`/users/${id}/role`, { role: role.toLowerCase() }).then((response) => checked(response, parseUser)),
+    api.put(`/users/${id}/role`, { role: role.toLowerCase() }).then((response) => transformed(response, normalizeUserResponse)),
   delete: (id: string) => api.delete(`/users/${id}`),
 }
 
@@ -287,14 +319,14 @@ export const aiCoursesApi = {
 
 export const mediaApi = {
   getAll: (params?: { type?: string; search?: string; page?: number; limit?: number }) =>
-    api.get('/ressources', { params }).then((response) => checked(response, parsePaginatedMedia)),
+    api.get('/ressources', { params }).then((response) => transformed(response, parseMediaList)),
   getByScenario: (
     scenarioId: number,
     params?: { type?: string; search?: string; page?: number; limit?: number },
   ) =>
     api
       .get('/ressources', { params: { scenarioId, ...params } })
-      .then((response) => checked(response, parsePaginatedMedia)),
+      .then((response) => transformed(response, parseMediaList)),
   upload: async (fileOrFormData: File | FormData, scenarioId?: number) => {
     const file = fileOrFormData instanceof FormData
       ? fileOrFormData.get('file')
@@ -317,7 +349,7 @@ export const mediaApi = {
 
     return api
       .post(`/media/upload/ressource/${resourceId}`, formData)
-      .then((response) => checked(response, parseMediaAsset))
+      .then((response) => transformed(response, parseMediaAsset))
   },
   updateTags: (id: string, tags: string[]) => {
     void id

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { BookOpen, CheckCircle2 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { useTranslation } from '@/context/LanguageContext'
 
 const authPhotoUrl =
   'https://images.pexels.com/photos/5212655/pexels-photo-5212655.jpeg?auto=compress&cs=tinysrgb&w=1400'
@@ -15,6 +16,8 @@ interface AuthShellProps {
 }
 
 export function AuthShell({ title, description, children, footer }: AuthShellProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="grid min-h-screen bg-[var(--lux-bg)] text-[var(--lux-text)] lg:grid-cols-[0.9fr_1.1fr]">
       <aside className="relative hidden min-h-screen overflow-hidden border-r border-[var(--lux-line)] lg:block">
@@ -33,20 +36,20 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
             </span>
             <span>
               <span className="block text-sm font-bold text-[var(--lux-text-strong)]">SupScenario</span>
-              <span className="block text-[11px] text-[var(--lux-muted-soft)]">Learning design workspace</span>
+              <span className="block text-[11px] text-[var(--lux-muted-soft)]">{t('nav_course_authoring')} workspace</span>
             </span>
           </Link>
 
           <div className="max-w-lg rounded-3xl border border-[var(--lux-line)] bg-[var(--lux-surface)]/90 p-8 shadow-2xl backdrop-blur-xl">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--lux-primary)]/30 bg-[var(--lux-primary-soft)] px-3 py-1 text-xs font-bold uppercase tracking-wider text-[var(--lux-primary-muted)]">
-              Focused course operations
+              {t('auth_shell_tagline')}
             </span>
             <p className="mt-4 text-3xl font-bold leading-tight text-[var(--lux-text-strong)]">
-              Keep authoring, review, and delivery in one connected workflow.
+              {t('auth_shell_value_prop')}
             </p>
             <div className="mt-6 flex items-center gap-2 text-sm font-medium text-[var(--lux-muted)]">
               <CheckCircle2 size={16} className="text-[var(--lux-primary-muted)]" />
-              Structured for educators and instructional teams
+              {t('auth_shell_sub')}
             </div>
           </div>
         </div>

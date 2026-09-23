@@ -19,11 +19,15 @@ export function useReviewActions({
   persistedScenarioId,
   qc,
 }: UseReviewActionsOptions) {
+  // Backend only ever sends `statut` (lowercase, e.g. 'en_cours_validation'); `status`
+  // is never populated by the API despite the type saying otherwise, so this always
+  // compared undefined to 'EN_COURS_VALIDATION' and the review panel never showed.
+  const scenarioStatus = String(scenario?.status ?? scenario?.statut ?? '').toUpperCase()
   const canReviewScenario = Boolean(
     isAdmin &&
       !hasCurrentUserShare &&
       persistedScenarioId &&
-      scenario?.status === 'EN_COURS_VALIDATION',
+      scenarioStatus === 'EN_COURS_VALIDATION',
   )
 
   const invalidateScenario = useCallback(() => {

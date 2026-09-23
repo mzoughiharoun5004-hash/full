@@ -90,7 +90,7 @@ export function RadioGroup({
       <div className="space-y-2">
         {options.map(([optionValue, labelText]) => (
           <label key={optionValue} className="flex items-center gap-2 text-sm text-[var(--lux-muted)]">
-            <input type="radio" checked={value === optionValue} onChange={() => onChange(optionValue)} />
+            <input type="radio" name={label} checked={value === optionValue} onChange={() => onChange(optionValue)} />
             {labelText}
           </label>
         ))}

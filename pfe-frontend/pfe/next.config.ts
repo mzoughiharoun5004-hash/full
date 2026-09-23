@@ -31,6 +31,14 @@ async headers() {
   const scriptSrc = isDev
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     : "script-src 'self' 'unsafe-inline'";
+  // The SCORM viewer (/dashboard/scorm-viewer) embeds an iframe served by the
+  // backend (a different origin/port from this app). CSP has no frame-src
+  // fallback to connect-src — only to child-src, then default-src 'self' —
+  // so without an explicit allowance here that iframe is silently blocked.
+  // connect-src below is derived from this same origin (rather than a second
+  // hardcoded localhost literal) so the app's own axios/socket.io calls don't
+  // get silently blocked once NEXT_PUBLIC_API_URL points at a real backend.
+  const apiOrigin = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   return [{
     source: '/(.*)',
@@ -41,9 +49,11 @@ async headers() {
       value: [
         "default-src 'self'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: https://images.unsplash.com https://*.unsplash.com https://loremflickr.com https://images.pexels.com https://videos.pexels.com https://cdn.pixabay.com https://*.ytimg.com https://*.vimeocdn.com https://commondatastorage.googleapis.com",
+        `img-src 'self' data: ${apiOrigin} https://images.unsplash.com https://*.unsplash.com https://loremflickr.com https://images.pexels.com https://videos.pexels.com https://cdn.pixabay.com https://*.ytimg.com https://*.vimeocdn.com https://commondatastorage.googleapis.com`,
+        `media-src 'self' ${apiOrigin}`,
         scriptSrc,
-        "connect-src 'self' http://localhost:3001 ws://localhost:3001",
+        `frame-src 'self' ${apiOrigin}`,
+        `connect-src 'self' ${apiOrigin} ${apiOrigin.replace(/^http/, 'ws')}`,
       ].join('; '),
     }]
   }]

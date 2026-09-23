@@ -6,43 +6,47 @@ import {
   BookOpen,
   Check,
   FileArchive,
+  Globe,
   Library,
   MessageSquareText,
   PenLine,
   ShieldCheck,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { useTranslation, useLanguage, type Locale } from '@/context/LanguageContext'
+import { cn } from '@/lib/utils'
 
 const heroPhotoUrl =
   'https://images.pexels.com/photos/5212655/pexels-photo-5212655.jpeg?auto=compress&cs=tinysrgb&w=1800'
 
-const workflow = [
-  {
-    number: '01',
-    icon: PenLine,
-    title: 'Shape the learning path',
-    detail: 'Write lessons, decisions, and assessments in one structured course document.',
-  },
-  {
-    number: '02',
-    icon: MessageSquareText,
-    title: 'Review with context',
-    detail: 'Keep feedback, ownership, and approval status connected to the scenario.',
-  },
-  {
-    number: '03',
-    icon: FileArchive,
-    title: 'Validate delivery',
-    detail: 'Preview SCORM packages and verify the learner experience before release.',
-  },
-]
+function LanguageToggle() {
+  const { locale, setLocale } = useLanguage()
+  const options: { value: Locale; label: string }[] = [
+    { value: 'en', label: 'EN' },
+    { value: 'fr', label: 'FR' },
+  ]
 
-const capabilities = [
-  'Scenario and course authoring',
-  'Shared media library',
-  'Review and approval workflow',
-  'SCORM package preview',
-]
+  return (
+    <div className="flex items-center gap-0.5 rounded-xl border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] p-0.5">
+      <Globe size={13} className="mx-1.5 text-[var(--lux-muted-soft)]" />
+      {options.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => setLocale(value)}
+          className={cn(
+            'rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all',
+            locale === value
+              ? 'bg-[var(--lux-primary)] text-white shadow-sm'
+              : 'text-[var(--lux-muted)] hover:text-[var(--lux-text)]',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function PrimaryLink({
   href,
@@ -79,6 +83,20 @@ function SecondaryLink({ href, children }: { href: string; children: React.React
 }
 
 export default function HomePage() {
+  const { t } = useTranslation()
+
+  const workflow = [
+    { number: '01', icon: PenLine,           titleKey: 'landing_step1_title' as const, detailKey: 'landing_step1_detail' as const },
+    { number: '02', icon: MessageSquareText, titleKey: 'landing_step2_title' as const, detailKey: 'landing_step2_detail' as const },
+    { number: '03', icon: FileArchive,       titleKey: 'landing_step3_title' as const, detailKey: 'landing_step3_detail' as const },
+  ]
+
+  const capabilities = [
+    t('landing_cap1'),
+    t('landing_cap2'),
+    t('landing_cap3'),
+  ]
+
   return (
     <main className="min-h-screen bg-[var(--lux-bg)] text-[var(--lux-text)]">
       <section className="relative flex min-h-[660px] flex-col justify-between overflow-hidden pb-12 pt-4 lg:min-h-[720px] lg:pb-16">
@@ -98,28 +116,29 @@ export default function HomePage() {
               </div>
               <div className="min-w-0">
                 <span className="block truncate text-sm font-extrabold tracking-tight">SupScenario</span>
-                <span className="hidden text-[11px] font-medium text-[var(--lux-muted-soft)] sm:block">Learning design workspace</span>
+                <span className="hidden text-[11px] font-medium text-[var(--lux-muted-soft)] sm:block">{t('nav_course_authoring')} workspace</span>
               </div>
             </Link>
 
             <nav className="hidden items-center gap-7 text-xs font-bold uppercase tracking-wider text-[var(--lux-muted)] md:flex">
-              <a href="#workflow" className="transition-colors hover:text-[var(--lux-primary-muted)]">Workflow</a>
-              <a href="#platform" className="transition-colors hover:text-[var(--lux-primary-muted)]">Platform</a>
+              <a href="#workflow" className="transition-colors hover:text-[var(--lux-primary-muted)]">{t('landing_nav_workflow')}</a>
+              <a href="#platform" className="transition-colors hover:text-[var(--lux-primary-muted)]">{t('landing_nav_platform')}</a>
             </nav>
 
             <div className="flex items-center gap-2.5">
+              <LanguageToggle compact />
               <ThemeToggle compact />
               <Link
                 href="/auth/login"
                 className="hidden h-9.5 items-center rounded-xl px-4 text-xs font-bold text-[var(--lux-text-strong)] transition-colors hover:bg-[var(--lux-overlay-hover)] sm:inline-flex"
               >
-                Log in
+                {t('landing_nav_login')}
               </Link>
               <Link
                 href="/auth/register"
                 className="inline-flex h-9.5 items-center gap-2 rounded-xl bg-[var(--lux-primary)] px-4 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.35)] transition-all hover:bg-[var(--lux-primary-hover)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.45)] active:scale-[0.98]"
               >
-                Get started
+                {t('landing_nav_get_started')}
                 <ArrowRight size={14} />
               </Link>
             </div>
@@ -130,23 +149,23 @@ export default function HomePage() {
           <div className="max-w-2xl rounded-3xl border border-[var(--lux-line)]/80 bg-[var(--lux-surface)]/90 p-8 shadow-2xl backdrop-blur-2xl sm:p-11">
             <span className="inline-flex items-center gap-2 rounded-full border border-[var(--lux-primary)]/35 bg-[var(--lux-primary-soft)] px-4 py-1.5 text-xs font-extrabold uppercase tracking-wider text-[var(--lux-primary-muted)] shadow-xs">
               <span className="h-2 w-2 rounded-full bg-[var(--lux-primary-muted)] animate-pulse" />
-              Course authoring & review
+              {t('landing_hero_badge')}
             </span>
             <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-tight text-[var(--lux-text-strong)] sm:text-5xl lg:text-6xl">
-              SupScenario
+              {t('landing_hero_headline')}
             </h1>
             <p className="mt-4 text-lg font-bold text-[var(--lux-text)] sm:text-xl">
-              Turn complex training material into clear, interactive learning paths.
+              {t('landing_hero_tagline')}
             </p>
             <p className="mt-3 text-sm leading-6 text-[var(--lux-muted)] sm:text-base">
-              Author scenarios, organize media, coordinate team review, and validate SCORM delivery from one unified workspace.
+              {t('landing_hero_body')}
             </p>
             <div className="mt-9 flex flex-col gap-3.5 sm:flex-row sm:items-center">
               <PrimaryLink href="/auth/register">
-                Start authoring
+                {t('landing_hero_cta_primary')}
                 <ArrowRight size={16} />
               </PrimaryLink>
-              <SecondaryLink href="/auth/login">Open dashboard</SecondaryLink>
+              <SecondaryLink href="/auth/login">{t('landing_hero_cta_secondary')}</SecondaryLink>
             </div>
           </div>
         </div>
@@ -156,16 +175,16 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr]">
             <div>
-              <p className="text-xs font-bold uppercase text-[var(--lux-primary-muted)]">Workflow</p>
+              <p className="text-xs font-bold uppercase text-[var(--lux-primary-muted)]">{t('landing_workflow_eyebrow')}</p>
               <h2 className="mt-3 max-w-md text-3xl font-bold leading-tight text-[var(--lux-text-strong)] sm:text-4xl">
-                From rough source material to a review-ready course.
+                {t('landing_workflow_heading')}
               </h2>
             </div>
 
             <div className="grid border-t border-[var(--lux-line)] md:grid-cols-3">
-              {workflow.map(({ number, icon: Icon, title, detail }, index) => (
+              {workflow.map(({ number, icon: Icon, titleKey, detailKey }, index) => (
                 <article
-                  key={title}
+                  key={titleKey}
                   className={`border-b border-[var(--lux-line)] py-6 md:border-b-0 md:px-6 ${
                     index > 0 ? 'md:border-l' : ''
                   }`}
@@ -174,8 +193,8 @@ export default function HomePage() {
                     <span className="text-xs font-bold text-[var(--lux-muted-soft)]">{number}</span>
                     <Icon size={18} className="text-[var(--lux-primary-muted)]" />
                   </div>
-                  <h3 className="mt-8 text-base font-bold text-[var(--lux-text-strong)]">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[var(--lux-muted)]">{detail}</p>
+                  <h3 className="mt-8 text-base font-bold text-[var(--lux-text-strong)]">{t(titleKey)}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[var(--lux-muted)]">{t(detailKey)}</p>
                 </article>
               ))}
             </div>
@@ -186,12 +205,12 @@ export default function HomePage() {
       <section id="platform" className="bg-[var(--lux-bg)]">
         <div className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_0.85fr] lg:px-8 lg:py-20">
           <div>
-            <p className="text-xs font-bold uppercase text-[var(--lux-info)]">One workspace</p>
+            <p className="text-xs font-bold uppercase text-[var(--lux-info)]">{t('landing_platform_eyebrow')}</p>
             <h2 className="mt-3 max-w-2xl text-3xl font-bold leading-tight text-[var(--lux-text-strong)] sm:text-4xl">
-              Keep course structure, team decisions, and delivery checks connected.
+              {t('landing_platform_heading')}
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--lux-muted)]">
-              SupScenario gives educators and instructional teams a practical system for repeated authoring work, without scattering the course across documents, folders, and disconnected review threads.
+              {t('landing_platform_body')}
             </p>
           </div>
 
@@ -218,20 +237,18 @@ export default function HomePage() {
               <Library size={17} />
               <ShieldCheck size={17} />
             </div>
-            <h2 className="mt-4 text-3xl font-bold">Build the next course in one place.</h2>
-            <p className="mt-2 text-sm leading-6 text-white/75">
-              Start a new learning scenario or continue work already in review.
-            </p>
+            <h2 className="mt-4 text-3xl font-bold">{t('landing_cta_heading')}</h2>
+            <p className="mt-2 text-sm leading-6 text-white/75">{t('landing_cta_body')}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href="/auth/login"
               className="inline-flex h-11 items-center justify-center rounded-lg border border-white/35 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10"
             >
-              Log in
+              {t('landing_cta_login')}
             </Link>
             <PrimaryLink href="/auth/register" light>
-              Create account
+              {t('landing_cta_register')}
               <ArrowRight size={15} />
             </PrimaryLink>
           </div>
@@ -241,7 +258,7 @@ export default function HomePage() {
       <footer className="bg-[var(--lux-bg)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-xs text-[var(--lux-muted-soft)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span>SupScenario</span>
-          <span>Course authoring, review, and SCORM validation.</span>
+          <span>{t('landing_footer_tagline')}</span>
         </div>
       </footer>
     </main>

@@ -9,6 +9,15 @@ import type { AiChangeSet, AiCourseBrief, AiCourseOutline, CourseDocument, Scena
 
 const inputClass = 'w-full rounded-lg border border-[var(--lux-line)] bg-[var(--lux-surface)] px-3 py-2 text-sm text-[var(--lux-text)] outline-none placeholder:text-[var(--lux-muted-soft)] focus:border-[var(--lux-primary)] focus:ring-2 focus:ring-[var(--lux-primary)]/20'
 
+// Temporary kill switch for the "Ask AI" edit control (course/lesson/block
+// scopes, in AiCourseEditControl below). The "Create with AI" wizard is
+// unaffected and always renders. Flip to `true` (or drop the
+// `if (!ASK_AI_EDIT_VISIBLE) return null` below) to bring editing back too —
+// nothing else changes: every prop, hook, and call site in
+// InlineScenarioCourseEditor.tsx / LessonEditor.tsx / BlockItem.tsx stays
+// wired up exactly as before.
+const ASK_AI_EDIT_VISIBLE = false
+
 export function AiCourseCreationWizard({ onCreated }: { onCreated: (scenario: Scenario) => void }) {
   const [open, setOpen] = useState(false)
   const [brief, setBrief] = useState<AiCourseBrief>({
@@ -149,6 +158,8 @@ export function AiCourseEditControl({
     setProposal(null)
     setOpen(false)
   }
+
+  if (!ASK_AI_EDIT_VISIBLE) return null
 
   return <>
     <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)} title="Ask AI to propose an edit">

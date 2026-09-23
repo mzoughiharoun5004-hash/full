@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { approvedCollaboratorViewOnlyMessage } from '@/lib/scenarioActions'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { useScenarioRoom } from '@/context/SocketContext'
 import type { CourseDocument } from '@/types'
 import {
@@ -48,6 +49,7 @@ export function InlineScenarioCourseEditor({
 }: InlineScenarioCourseEditorProps) {
   const loadedDoc = loadedDocument ?? null
   const { user, isAdmin } = useAuth()
+  const { t } = useTranslation()
   const room = useScenarioRoom()
   const {
     collaborators,
@@ -183,8 +185,8 @@ export function InlineScenarioCourseEditor({
     viewOnlyMessage === 'approvedCollaborator'
       ? approvedCollaboratorViewOnlyMessage
       : viewOnlyMessage === 'collaborator'
-        ? 'You have view-only access as a collaborator.'
-      : 'View-only access'
+        ? t('editor_view_only_collaborator')
+      : t('editor_view_only')
   const canInviteCollaborators = Boolean(isScenarioOwner && persistedScenarioId && !readOnly)
   const canManageCollaborators = Boolean(isScenarioOwner && persistedScenarioId)
 
@@ -285,10 +287,10 @@ export function InlineScenarioCourseEditor({
       />
       <ConfirmDialog
         open={conflictDialogOpen}
-        title="Newer version available"
+        title={t('editor_conflict_title')}
         description={conflictDetails ? (
           <div className="space-y-2 text-sm">
-            <p>A newer version of this course was saved while you were editing.</p>
+            <p>{t('editor_conflict_body')}</p>
             <p className="text-[10px] text-slate-500">
               Last saved: {conflictDetails.lastEditTime} by {conflictDetails.lastEditUser}
             </p>
@@ -297,10 +299,10 @@ export function InlineScenarioCourseEditor({
             )}
           </div>
         ) : (
-          "A newer version of this course exists. Reload it now? Your unsaved local changes will be discarded."
+          t('editor_conflict_body')
         )}
-        confirmLabel="Reload"
-        cancelLabel="Keep editing"
+        confirmLabel={t('editor_conflict_reload')}
+        cancelLabel={t('editor_conflict_keep')}
         onConfirm={confirmConflictReload}
         onCancel={cancelConflictReload}
       />
@@ -320,7 +322,7 @@ export function InlineScenarioCourseEditor({
                 className="inline-flex shrink-0 items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold text-[var(--lux-muted)] hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text)]"
               >
                 <ArrowLeft size={16} />
-                Courses
+                {t('editor_back_courses')}
               </Link>
               <div className="flex shrink-0 items-center gap-2">
                 <ThemeToggle compact className="h-9 w-9 rounded-md" />
@@ -328,7 +330,7 @@ export function InlineScenarioCourseEditor({
                   <>
                     <Button variant="secondary" size="sm" onClick={() => setPreviewOpen(true)}>
                       <Eye size={14} className="mr-1" />
-                      Preview
+                      {t('editor_preview')}
                     </Button>
                     {!readOnly && (
                       <>
@@ -350,7 +352,7 @@ export function InlineScenarioCourseEditor({
                         )}
                         <Button size="sm" variant="secondary" onClick={() => setSettingsOpen((current) => !current)}>
                           <SlidersHorizontal size={14} className="mr-1" />
-                          Course settings
+                          {t('editor_course_settings')}
                         </Button>
                         {persistedScenarioId && (
                           <AiCourseEditControl
@@ -391,37 +393,14 @@ export function InlineScenarioCourseEditor({
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') commitCourseTitle()
                   }}
-                  placeholder="Enter course title..."
+                  placeholder={t('editor_title_placeholder')}
                   className="min-w-0 flex-1 bg-transparent text-[44px] font-bold leading-tight text-[var(--lux-text-strong)] outline-none placeholder:text-[var(--lux-muted-soft)] sm:text-[52px]"
                 />
-                <div className="ml-4 flex-1 min-w-0">
-                  {readiness.percent < 100 && (
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden mt-1">
-                      <div
-                        className={`h-full rounded-full bg-gradient-to-r from-[#0F6B4A] to-green-500 transition-width`}
-                        style={{ width: `${readiness.percent}%` }}
-                      />
-                      <span className="text-[10px] ml-2 whitespace-nowrap">
-                        {readiness.percent}% complete
-                      </span>
-                    </div>
-                  )}
-                  {readiness.errors.length > 0 && (
-                    <div className="mt-1 text-[10px] text-red-400">
-                      {readiness.errors.length} error(s) preventing save
-                    </div>
-                  )}
-                  {readiness.warnings.length > 0 && (
-                    <div className="mt-1 text-[10px] text-amber-400">
-                      {readiness.warnings.length} warning(s)
-                    </div>
-                  )}
-                </div>
                 <button
                   type="button"
                   onClick={commitCourseTitle}
                   className="mt-2 grid h-11 w-11 flex-shrink-0 place-items-center rounded-full bg-[var(--lux-primary)] text-[var(--lux-text-strong)] shadow-sm hover:bg-[var(--lux-primary-hover)]"
-                  aria-label="Confirm course title"
+                  aria-label={t('editor_confirm_title')}
                 >
                   <Check size={18} />
                 </button>
@@ -479,7 +458,7 @@ export function InlineScenarioCourseEditor({
               setSettingsOpen(false)
               setView({ type: 'structure' })
             } else {
-              toast.error('Save the lesson before returning to the course outline.')
+              toast.error(t('editor_save_before_return'))
             }
           }}
           onBack={() => {
@@ -501,7 +480,13 @@ export function InlineScenarioCourseEditor({
       </div>
 
       {previewOpen && (
-        <CoursePreview document={document} onClose={() => setPreviewOpen(false)} onUpdateDocument={updatePreviewDocument} />
+        <CoursePreview
+          document={document}
+          scenarioId={persistedScenarioId}
+          onClose={() => setPreviewOpen(false)}
+          onUpdateDocument={updatePreviewDocument}
+          onSaveBeforeExport={autosave.retry}
+        />
       )}
     </div>
   )

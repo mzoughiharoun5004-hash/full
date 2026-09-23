@@ -14,7 +14,6 @@ import { Repository } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { AuthService } from 'src/auth/auth.service';
-import { isApprovedScenarioStatut, StatutScenario } from 'src/common/enums';
 import { Scenario } from 'src/scenario/scenario.entity';
 import { ScenarioShare } from 'src/scenario-share/scenario-share.entity';
 import { ScenarioAccessPolicy } from 'src/scenario/scenario-access.policy';

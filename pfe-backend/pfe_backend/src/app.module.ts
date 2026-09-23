@@ -22,7 +22,6 @@ import { MediaModule } from './media/media.module';
 import { ScormModule } from './scorm/scorm.module';
 import { ScenarioCollaborationModule } from './scenario-collaboration/scenario-collaboration.module';
 import { AiCourseModule } from './ai-course/ai-course.module';
-import { RoleGuard } from './role/role.guard';
 import config from './config/config';
 import dbConfig from './config/db.config';
 import * as Joi from 'joi';
@@ -95,11 +94,6 @@ import * as Joi from 'joi';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    },
-    // Apply role guard globally — protect routes with @Roles() decorator
-    {
-      provide: APP_GUARD,
-      useClass: RoleGuard,
     },
   ],
 })

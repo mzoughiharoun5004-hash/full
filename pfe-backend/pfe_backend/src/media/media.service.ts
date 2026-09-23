@@ -45,7 +45,7 @@ export class MediaService {
     // Store the relative path so it can be served statically
     ressource.url = `/uploads/${file.filename}`;
     ressource.taille = file.size;
-    ressource.type = this.typeFromMime(file.mimetype, ressource.type);
+    ressource.type = this.typeFromMime(file.mimetype);
     if (uploaderId && !ressource.uploadedBy) {
       ressource.uploadedBy = { id: uploaderId } as Ressource['uploadedBy'];
     }
@@ -53,13 +53,17 @@ export class MediaService {
     return this.ressourceRepo.save(ressource);
   }
 
-  private typeFromMime(
-    mimetype: string,
-    fallback: TypeRessource,
-  ): TypeRessource {
+  private typeFromMime(mimetype: string): TypeRessource {
     if (mimetype.startsWith('video/')) return TypeRessource.VIDEO;
     if (mimetype.startsWith('image/')) return TypeRessource.MASS;
     if (mimetype.startsWith('audio/')) return TypeRessource.AUDIO;
-    return fallback ?? TypeRessource.DOCUMENT;
+    // Every other mimetype accepted by the upload whitelist (pdf, doc/docx,
+    // ppt/pptx, xls/xlsx, csv, txt) is a document. This used to fall back to
+    // the ressource's *current* type, but that's always the 'mass' placeholder
+    // the frontend sends at creation time (see mediaApi.upload in the
+    // frontend's lib/api.ts) — so every non-audio/video/image upload was
+    // silently stored as an image. Document uploads are the only case where
+    // that fallback ever mattered, and they should always resolve to DOCUMENT.
+    return TypeRessource.DOCUMENT;
   }
 }

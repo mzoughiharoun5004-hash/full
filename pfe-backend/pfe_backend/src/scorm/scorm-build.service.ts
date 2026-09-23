@@ -80,16 +80,27 @@ export class ScormBuildService extends ScormExportBase {
       .map((file) => `<file href="${file}"/>`)
       .join('\n      ');
 
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<manifest identifier="${uid}" version="1.1"
-  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+    const is2004 = course.settings.scormVersion === '2004';
+    const manifestNamespaces = is2004
+      ? `xmlns="http://www.imsglobal.org/xsd/imscp_v1p1"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_v1p3"
+  xmlns:imsss="http://www.imsglobal.org/xsd/imsss"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imscp_v1p1 imscp_v1p1.xsd
+    http://www.adlnet.org/xsd/adlcp_v1p3 adlcp_v1p3.xsd
+    http://www.imsglobal.org/xsd/imsss imsss_v1p0.xsd"`
+      : `xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
   xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd
-    http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd">
+    http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd"`;
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<manifest identifier="${uid}" version="${is2004 ? '1' : '1.1'}"
+  ${manifestNamespaces}>
   <metadata>
     <schema>ADL SCORM</schema>
-    <schemaversion>${course.settings.scormVersion === '2004' ? '2004 4th Edition' : '1.2'}</schemaversion>
+    <schemaversion>${is2004 ? '2004 4th Edition' : '1.2'}</schemaversion>
   </metadata>
   <organizations default="ORG_001">
     <organization identifier="ORG_001" structure="hierarchical">
@@ -105,7 +116,7 @@ export class ScormBuildService extends ScormExportBase {
     </organization>
   </organizations>
   <resources>
-    <resource identifier="RESOURCE_SCO" type="webcontent" adlcp:scormtype="sco" href="index.html">
+    <resource identifier="RESOURCE_SCO" type="webcontent" adlcp:${is2004 ? 'scormType' : 'scormtype'}="sco" href="index.html">
       ${files}
     </resource>
   </resources>
@@ -912,7 +923,8 @@ export class ScormBuildService extends ScormExportBase {
     }
     if (block.type === 'continue_button') return '<div class="continue-wrap"><button class="primary continue" data-block="' + esc(block.id) + '">' + esc(String(block.metadata?.label || block.content || block.title || 'Continue')) + '</button></div>';
     if (block.type === 'flashcards') return renderFlashcardsBlock(block);
-    if (['multiple_choice', 'multiple_select', 'true_false', 'fill_blank', 'matching', 'hotspot', 'short_answer', 'likert', 'rating_slider'].includes(block.type)) return renderQuestionBlock(block);
+    if (['multiple_choice', 'multiple_select', 'true_false', 'fill_blank', 'matching'].includes(block.type)) return renderQuestionBlock(block);
+    if (block.type === 'hotspot') return renderHotspotBlock(block);
     if (['choice_point', 'branching_dialogue'].includes(block.type)) return renderBranchingDecisionBlock(block);
     if (block.type === 'table') return renderTableBlock(block);
     if (block.type === 'chart') return renderChartBlock(block);
@@ -1100,6 +1112,24 @@ export class ScormBuildService extends ScormExportBase {
           '<span class="choice-dot"></span>' +
           '<span>' + esc(opt.title || '') + '</span>' +
           '</button>'
+        ).join('') + '</div>' : '') +
+        '</section>';
+    }
+
+    function renderHotspotBlock(block) {
+      const imageUrl = normalizeUrl(metaString(block, 'imageUrl', '') || block.assetUrl || '');
+      const regions = metaString(block, 'regions', '');
+      const items = visibleInteractionItems(block);
+      return '<section class="block interaction-block">' +
+        (block.title ? '<h2>' + esc(block.title) + '</h2>' : '') +
+        (block.content ? '<p class="summary">' + esc(block.content) + '</p>' : '') +
+        (imageUrl ? '<figure class="media-block image-block"><img src="' + esc(imageUrl) + '" alt="' + esc(block.title || 'Hotspot image') + '"/></figure>' : '<div class="empty-media">Hotspot image</div>') +
+        (regions ? '<aside class="callout"><strong>Hotspot regions</strong><p>' + esc(regions) + '</p></aside>' : '') +
+        (items.length ? '<div class="items-grid">' + items.map((item, index) =>
+          '<article><span>' + (index + 1) + '</span><div>' +
+          (item.title ? '<h3>' + esc(item.title) + '</h3>' : '') +
+          (item.content ? '<p>' + esc(item.content) + '</p>' : '') +
+          '</div></article>'
         ).join('') + '</div>' : '') +
         '</section>';
     }

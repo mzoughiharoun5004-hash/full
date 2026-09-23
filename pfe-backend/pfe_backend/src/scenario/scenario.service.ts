@@ -1303,7 +1303,7 @@ export class ScenarioService {
       settings: {
         completionMode: 'pages',
         passingScore: 80,
-        scormVersion: '1.2',
+        scormVersion: '2004',
         completionPercentage: 100,
         requireQuizPass: false,
       },
@@ -1317,7 +1317,7 @@ export class ScenarioService {
       },
       publish: {
         target: 'lms',
-        lmsStandard: 'scorm_1_2',
+        lmsStandard: 'scorm_2004',
         tracking: 'completion_and_score',
         completionPercentage: 100,
         passingScore: 80,
@@ -1447,7 +1447,7 @@ export class ScenarioService {
       settings: {
         completionMode: 'pages',
         passingScore: 80,
-        scormVersion: '1.2',
+        scormVersion: '2004',
         completionPercentage: 100,
         requireQuizPass: false,
       },
@@ -1461,7 +1461,7 @@ export class ScenarioService {
       },
       publish: {
         target: 'lms',
-        lmsStandard: 'scorm_1_2',
+        lmsStandard: 'scorm_2004',
         tracking: 'completion_and_score',
         completionPercentage: 100,
         passingScore: 80,

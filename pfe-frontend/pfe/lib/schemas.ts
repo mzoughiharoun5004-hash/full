@@ -366,18 +366,18 @@ export const ScenarioNotificationSchema = z.object({
 
 // Media schemas with transformation
 export const BackendMediaAssetSchema = z.object({
-  id: z.string(),
-  filename: z.string().optional(),
-  originalName: z.string().optional(),
-  titre: z.string().optional(),
-  mimetype: z.string(),
-  taille: z.number().int().nonnegative().optional(),
-  size: z.number().int().nonnegative().optional(),
-  url: z.string(),
-  type: z.string(),
-  tags: z.array(z.string()).optional(),
-  dateCreation: z.string().datetime(),
-  createdAt: z.string().datetime(),
+  id: z.union([z.string(), z.number()]).transform(String),
+  filename: z.string().nullish(),
+  originalName: z.string().nullish(),
+  titre: z.string().nullish(),
+  mimetype: z.string().nullish(),
+  taille: z.number().int().nonnegative().nullish(),
+  size: z.number().int().nonnegative().nullish(),
+  url: z.string().nullish(),
+  type: z.string().nullish(),
+  tags: z.array(z.string()).nullish(),
+  dateCreation: z.string().nullish(),
+  createdAt: z.string().nullish(),
 }).transform((data) => {
   // Determine media type from filename/mimetype/url if not provided
   const typeFromFile = (filename: string | undefined) => {
@@ -406,9 +406,28 @@ export const BackendMediaAssetSchema = z.object({
     }
   };
 
-  const determinedType = data.type ||
-    typeFromFile(data.filename) ||
-    typeFromFile(data.originalName) ||
+  // The backend's own resource-type enum is lowercase and uses 'mass' as
+  // legacy naming for images ('video' / 'audio' / 'document' / 'discussion'
+  // are the others). Normalize it into the frontend's MediaType enum first,
+  // and only fall back to sniffing the file extension when that's missing
+  // or unrecognized.
+  const backendTypeMap: Record<string, z.infer<typeof MediaTypeSchema>> = {
+    mass: 'IMAGE',
+    image: 'IMAGE',
+    video: 'VIDEO',
+    audio: 'AUDIO',
+    document: 'DOCUMENT',
+    discussion: 'DOCUMENT',
+    IMAGE: 'IMAGE',
+    VIDEO: 'VIDEO',
+    AUDIO: 'AUDIO',
+    DOCUMENT: 'DOCUMENT',
+  };
+
+  const determinedType =
+    (data.type ? backendTypeMap[data.type] : undefined) ||
+    typeFromFile(data.filename ?? undefined) ||
+    typeFromFile(data.originalName ?? undefined) ||
     (data.url ? typeFromFile(data.url.split('/').pop()) : undefined) ||
     'DOCUMENT'; // Default to document
 
@@ -436,6 +455,15 @@ export const MediaAssetSchema = z.object({
   tags: z.array(z.string()),
   createdAt: z.string().datetime(),
 });
+
+// The `/ressources` list endpoints (mediaApi.getAll / getByScenario) return a
+// bare array of backend-shaped resources, not the `{ items, total, page,
+// limit }` envelope PaginatedMediaSchema below describes. Parse the array
+// with BackendMediaAssetSchema so every item is actually translated (lowercase
+// backend `type`, `titre`/`taille` field names, ...) into the frontend
+// MediaAsset shape, instead of being checked against a schema it can never
+// match.
+export const BackendMediaListSchema = z.array(BackendMediaAssetSchema);
 
 // Paginated response schemas
 export const PaginatedScenariosSchema = z.object({
@@ -606,7 +634,12 @@ export const parseScenario = createSchemaParser(ScenarioSchema);
 export const parseScenarioShare = createSchemaParser(ScenarioShareSchema);
 export const parseScenarioComment = createSchemaParser(ScenarioCommentSchema);
 export const parseScenarioNotification = createSchemaParser(ScenarioNotificationSchema);
-export const parseMediaAsset = createSchemaParser(MediaAssetSchema);
+// Parses the raw backend resource (lowercase `type`, `titre`/`taille`, ...)
+// straight into a frontend MediaAsset. Only ever called on raw API responses,
+// never on already-transformed data, so it must use BackendMediaAssetSchema
+// (which transforms) rather than MediaAssetSchema (which only validates).
+export const parseMediaAsset = createSchemaParser(BackendMediaAssetSchema);
+export const parseMediaList = createSchemaParser(BackendMediaListSchema);
 export const parseQuestion = createSchemaParser(QuestionSchema);
 export const parseQuiz = createSchemaParser(QuizResponseSchema);
 export const parseUploadedScormPackage = createSchemaParser(UploadedScormPackageSchema);

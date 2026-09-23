@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { analyticsApi, scenariosApi } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -28,17 +29,22 @@ import {
   scenarioPrimaryHref,
   userHasScenarioEditShare,
 } from '@/lib/scenarioActions'
-import type { Scenario } from '@/types'
+import type { Scenario, ScenarioStatus } from '@/types'
 
-const pipelineMeta = [
-  { label: 'Draft', status: 'BROUILLON', color: 'var(--lux-gold)' },
-  { label: 'In review', status: 'EN_COURS_VALIDATION', color: 'var(--lux-info)' },
-  { label: 'Approved', status: 'APPROVED', color: 'var(--lux-primary)' },
-  { label: 'Archived', status: 'ARCHIVE', color: 'var(--lux-muted-soft)' },
+const pipelineStatusKeys = [
+  { status: 'BROUILLON',           color: 'var(--lux-gold)',        labelKey: 'dashboard_pipeline_draft'    },
+  { status: 'EN_COURS_VALIDATION', color: 'var(--lux-info)',        labelKey: 'dashboard_pipeline_review'   },
+  { status: 'APPROVED',            color: 'var(--lux-primary)',     labelKey: 'dashboard_pipeline_approved' },
+  { status: 'ARCHIVE',             color: 'var(--lux-muted-soft)', labelKey: 'dashboard_pipeline_archived' },
 ] as const
+
+function scenarioStatusOf(scenario: Scenario): ScenarioStatus {
+  return String(scenario.status ?? scenario.statut ?? '').toUpperCase() as ScenarioStatus
+}
 
 export default function DashboardPage() {
   const { user, isAdmin } = useAuth()
+  const { t } = useTranslation()
 
   const { data: analyticsData, isLoading: loadingAnalytics } = useQuery({
     queryKey: ['analytics-dashboard', isAdmin ? 'admin' : 'me'],
@@ -46,14 +52,6 @@ export default function DashboardPage() {
     enabled: isAdmin,
   })
 
-  // These two queries back the dashboard's aggregate counts (approved/review/
-  // draft, "My scenarios", the pipeline breakdown). There's no dedicated
-  // stats/count endpoint, so this fetches a capped page of scenarios and
-  // counts client-side. `limit: 100` is the backend's own max page size
-  // (see ScenarioService.findAllPaginated's safeLimit) — on a platform with
-  // more than 100 scenarios in a given visibility bucket, these counts will
-  // undercount. Swap this for a real aggregate/stats endpoint if one is
-  // ever added.
   const { data: platformScenariosData, isLoading: loadingPlatformScenarios } = useQuery<Scenario[]>({
     queryKey: ['scenarios-platform-overview'],
     queryFn: () => scenariosApi.getAllAdmin({ limit: 100 }).then((response) => response.data.items),
@@ -72,17 +70,18 @@ export default function DashboardPage() {
     const ownerId = scenario.author?.id ?? scenario.ownerId
     return String(ownerId ?? '') === String(user?.id ?? '')
   })
-  const approvedCount = platformScenarios.filter((scenario) => isApprovedScenarioStatus(scenario.status)).length
-  const reviewCount = platformScenarios.filter((scenario) => scenario.status === 'EN_COURS_VALIDATION').length
-  const draftCount = platformScenarios.filter((scenario) => scenario.status === 'BROUILLON').length
-  const loadingCards =
-    loadingMyScenarios || (isAdmin && (loadingPlatformScenarios || loadingAnalytics))
+  const approvedCount = platformScenarios.filter((scenario) => isApprovedScenarioStatus(scenarioStatusOf(scenario))).length
+  const reviewCount = platformScenarios.filter((scenario) => scenarioStatusOf(scenario) === 'EN_COURS_VALIDATION').length
+  const draftCount = platformScenarios.filter((scenario) => scenarioStatusOf(scenario) === 'BROUILLON').length
+  const loadingCards = loadingMyScenarios || (isAdmin && (loadingPlatformScenarios || loadingAnalytics))
 
-  const pipeline = pipelineMeta.map((item) => ({
+  const pipeline = pipelineStatusKeys.map((item) => ({
     ...item,
+    label: t(item.labelKey),
     value: platformScenarios.filter((scenario) => {
-      if (item.status === 'APPROVED') return isApprovedScenarioStatus(scenario.status)
-      return scenario.status === item.status
+      const status = scenarioStatusOf(scenario)
+      if (item.status === 'APPROVED') return isApprovedScenarioStatus(status)
+      return status === item.status
     }).length,
   }))
   const pipelineTotal = Math.max(1, pipeline.reduce((total, item) => total + item.value, 0))
@@ -100,16 +99,16 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 fade-up">
       <PageHeader
-        eyebrow="Workspace Overview"
-        title={firstName ? `Welcome back, ${firstName}` : 'Overview'}
-        description="Track course activity, review status, and continue your latest scenario authoring."
+        eyebrow={t('dashboard_eyebrow')}
+        title={firstName ? t('dashboard_title_greeting', { name: firstName }) : t('dashboard_title_default')}
+        description={t('dashboard_description')}
         actions={
           <Link
             href="/dashboard/scenarios/new"
             className="inline-flex h-9.5 items-center gap-2 rounded-xl bg-[var(--lux-primary)] px-4 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.3)] transition-all hover:bg-[var(--lux-primary-hover)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98]"
           >
             <Plus size={15} />
-            New scenario
+            {t('topbar_new_scenario')}
           </Link>
         }
       />
@@ -122,31 +121,31 @@ export default function DashboardPage() {
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             icon={Film}
-            title={isAdmin ? 'Approved on platform' : 'Approved scenarios'}
+            title={isAdmin ? t('dashboard_metric_approved_admin') : t('dashboard_metric_approved')}
             value={approvedCount}
-            description="Ready for delivery & export"
+            description={t('dashboard_metric_approved_desc')}
             iconVariant="primary"
-            trend={{ value: 'Live', label: 'In production', isPositive: true }}
+            trend={{ value: t('dashboard_metric_approved_trend'), label: t('dashboard_metric_approved_trend_label'), isPositive: true }}
           />
           <MetricCard
             icon={BookOpen}
-            title="My scenarios"
+            title={t('dashboard_metric_mine')}
             value={myOwnedScenarios.length}
-            description="Created by you"
+            description={t('dashboard_metric_mine_desc')}
             iconVariant="info"
           />
           <MetricCard
             icon={Clock3}
-            title="In review"
+            title={t('dashboard_metric_review')}
             value={reviewCount}
-            description="Awaiting feedback or approval"
+            description={t('dashboard_metric_review_desc')}
             iconVariant="gold"
           />
           <MetricCard
             icon={isAdmin ? Users : Sparkles}
-            title={isAdmin ? 'Platform users' : 'Draft scenarios'}
+            title={isAdmin ? t('dashboard_metric_users') : t('dashboard_metric_drafts')}
             value={isAdmin ? (analyticsData?.totalUsers ?? '-') : draftCount}
-            description={isAdmin ? 'Active workspace accounts' : 'Work in progress'}
+            description={isAdmin ? t('dashboard_metric_users_desc') : t('dashboard_metric_drafts_desc')}
             iconVariant="violet"
           />
         </section>
@@ -156,14 +155,14 @@ export default function DashboardPage() {
         <Card variant="glass">
           <CardHeader>
             <div>
-              <h2 className="text-sm font-bold text-[var(--lux-text-strong)]">Recent scenarios</h2>
-              <p className="mt-0.5 text-xs text-[var(--lux-muted-soft)]">Your latest authoring activity</p>
+              <h2 className="text-sm font-bold text-[var(--lux-text-strong)]">{t('dashboard_recent_title')}</h2>
+              <p className="mt-0.5 text-xs text-[var(--lux-muted-soft)]">{t('dashboard_recent_subtitle')}</p>
             </div>
             <Link
               href="/dashboard/scenarios"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--lux-primary-muted)] transition-colors hover:text-[var(--lux-text-strong)] group"
             >
-              View all
+              {t('dashboard_view_all')}
               <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
           </CardHeader>
@@ -174,13 +173,13 @@ export default function DashboardPage() {
               </div>
             ) : recentScenarios.length === 0 ? (
               <div className="px-5 py-14 text-center">
-                <p className="text-sm font-bold text-[var(--lux-text-strong)]">No scenarios yet</p>
-                <p className="mt-1 text-xs text-[var(--lux-muted-soft)]">Create a scenario to start your workspace activity.</p>
+                <p className="text-sm font-bold text-[var(--lux-text-strong)]">{t('dashboard_no_scenarios')}</p>
+                <p className="mt-1 text-xs text-[var(--lux-muted-soft)]">{t('dashboard_no_scenarios_desc')}</p>
                 <Link
                   href="/dashboard/scenarios/new"
                   className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--lux-primary-soft)] px-3 text-xs font-bold text-[var(--lux-primary-muted)] hover:bg-[var(--lux-primary)] hover:text-white transition-all"
                 >
-                  <Plus size={14} /> Create scenario
+                  <Plus size={14} /> {t('dashboard_create_scenario')}
                 </Link>
               </div>
             ) : (
@@ -189,26 +188,16 @@ export default function DashboardPage() {
                   const scenarioOwnerId = scenario.author?.id ?? scenario.ownerId
                   const isOwner = String(scenarioOwnerId ?? '') === String(user?.id ?? '')
                   const hasEditShare = userHasScenarioEditShare(scenario.shares, user?.id)
-                  const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenario.status)
-                  const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({
-                    isOwner,
-                    hasEditShare,
-                    status: scenario.status,
-                  })
-                  const canEditScenario = canUserEditScenario({
-                    isOwner,
-                    hasEditShare,
-                    status: scenario.status,
-                  })
+                  const scenarioStatus = scenarioStatusOf(scenario)
+                  const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenarioStatus)
+                  const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({ isOwner, hasEditShare, status: scenarioStatus })
+                  const canEditScenario = canUserEditScenario({ isOwner, hasEditShare, status: scenarioStatus })
                   const actionLabel = canEditScenario
-                    ? 'Edit'
+                    ? t('dashboard_action_edit')
                     : approvedCollaboratorViewOnly || !isAdmin
-                      ? 'View'
-                      : 'Review'
-                  const primaryHref = scenarioPrimaryHref(scenario.id, {
-                    canEdit: canEditScenario,
-                    isApprovedOwner,
-                  })
+                      ? t('dashboard_action_view')
+                      : t('dashboard_action_review')
+                  const primaryHref = scenarioPrimaryHref(scenario.id, { canEdit: canEditScenario, isApprovedOwner })
                   const collaboratorNames = (scenario.shares ?? [])
                     .map((share) => formatUserName(share.user, ''))
                     .filter(Boolean)
@@ -227,26 +216,27 @@ export default function DashboardPage() {
                             {scenario.titre ?? scenario.title}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium text-[var(--lux-muted-soft)]">
-                            <span>Updated {formatDate(scenario.updatedAt ?? scenario.dateCreation ?? scenario.createdAt)}</span>
+                            <span>{t('dashboard_updated', { date: formatDate(scenario.updatedAt ?? scenario.dateCreation ?? scenario.createdAt) })}</span>
                             {collaboratorNames.length > 0 && (
-                              <span>• {collaboratorNames.length} collaborator{collaboratorNames.length === 1 ? '' : 's'}</span>
+                              <span>• {collaboratorNames.length === 1
+                                ? t('dashboard_collaborator', { n: collaboratorNames.length })
+                                : t('dashboard_collaborators', { n: collaboratorNames.length })
+                              }</span>
                             )}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-3 pl-13 sm:justify-end sm:pl-0">
-                        <StatusBadge status={scenario.status} />
+                        <StatusBadge status={scenarioStatus} />
                         <Link
                           href={primaryHref}
                           onClick={async (event) => {
                             if (!isApprovedOwner) return
-
                             event.preventDefault()
                             if (!window.confirm(approvedOwnerEditMessage)) return
-
                             try {
-                              await scenariosApi.update(scenario.id, { statut: 'BROUILLON' })
+                              await scenariosApi.update(scenario.id, { statut: 'brouillon' })
                               window.location.href = primaryHref
                             } catch {
                               window.alert('Unable to move this scenario back to draft.')
@@ -268,9 +258,9 @@ export default function DashboardPage() {
         <Card variant="glass">
           <CardHeader>
             <div>
-              <h2 className="text-sm font-bold text-[var(--lux-text-strong)]">Scenario pipeline</h2>
+              <h2 className="text-sm font-bold text-[var(--lux-text-strong)]">{t('dashboard_pipeline_title')}</h2>
               <p className="mt-0.5 text-xs text-[var(--lux-muted-soft)]">
-                {isAdmin ? 'Platform status mix' : 'Your current status mix'}
+                {isAdmin ? t('dashboard_pipeline_subtitle_admin') : t('dashboard_pipeline_subtitle_user')}
               </p>
             </div>
           </CardHeader>
@@ -279,12 +269,9 @@ export default function DashboardPage() {
               {pipeline.map((item) => (
                 item.value > 0 && (
                   <span
-                    key={item.label}
+                    key={item.labelKey}
                     className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${(item.value / pipelineTotal) * 100}%`,
-                      backgroundColor: item.color,
-                    }}
+                    style={{ width: `${(item.value / pipelineTotal) * 100}%`, backgroundColor: item.color }}
                     title={`${item.label}: ${item.value}`}
                   />
                 )
@@ -295,7 +282,7 @@ export default function DashboardPage() {
               {pipeline.map((item) => {
                 const percentage = Math.round((item.value / pipelineTotal) * 100)
                 return (
-                  <div key={item.label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                  <div key={item.labelKey} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full shadow-xs" style={{ backgroundColor: item.color }} />
                       <span className="truncate text-xs font-semibold text-[var(--lux-text)]">{item.label}</span>
@@ -315,7 +302,7 @@ export default function DashboardPage() {
               href="/dashboard/scenarios"
               className="inline-flex h-9.5 w-full items-center justify-center gap-2 rounded-xl border border-[var(--lux-line)] bg-[var(--lux-surface-soft)] text-xs font-bold text-[var(--lux-text-strong)] transition-all hover:border-[var(--lux-primary)]/40 hover:bg-[var(--lux-elevated)] group"
             >
-              Manage scenarios
+              {t('dashboard_manage_scenarios')}
               <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
           </CardBody>

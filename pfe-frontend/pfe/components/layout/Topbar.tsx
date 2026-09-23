@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import { Avatar } from '@/components/ui/Avatar'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { scenariosApi } from '@/lib/api'
@@ -29,7 +30,7 @@ import {
   breadcrumbsFor,
   primaryNavItems,
   quickActions,
-  routeTitle,
+  routeTitleKey,
   utilityNavItems,
 } from './navConfig'
 
@@ -51,6 +52,7 @@ export function Topbar({
   const pathname = usePathname()
   const router = useRouter()
   const { user, isAdmin, logout } = useAuth()
+  const { t } = useTranslation()
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -67,7 +69,8 @@ export function Topbar({
   })
 
   const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim()
-  const title = routeTitle(pathname)
+  const titleKey = routeTitleKey(pathname)
+  const title = t(titleKey)
   const breadcrumbs = breadcrumbsFor(pathname)
   const searchItems = useMemo(
     () => [
@@ -81,10 +84,12 @@ export function Topbar({
   const filteredItems = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return searchItems
-    return searchItems.filter((item) =>
-      item.label.toLowerCase().includes(term) || item.description?.toLowerCase().includes(term),
-    )
-  }, [query, searchItems])
+    return searchItems.filter((item) => {
+      const lbl = t(item.labelKey).toLowerCase()
+      const desc = item.descriptionKey ? t(item.descriptionKey).toLowerCase() : (item.description?.toLowerCase() ?? '')
+      return lbl.includes(term) || desc.includes(term)
+    })
+  }, [query, searchItems, t])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -116,14 +121,14 @@ export function Topbar({
           type="button"
           onClick={handleOpenMobile}
           className="grid h-9 w-9 place-items-center rounded-xl text-[var(--lux-muted)] transition-colors hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text)] lg:hidden"
-          aria-label="Open navigation"
+          aria-label={t('common_open_menu')}
         >
           <Menu size={18} />
         </button>
 
         <SidebarToggleButton
           direction={isCollapsed ? 'expand' : 'collapse'}
-          label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+          label={isCollapsed ? t('nav_expand_topbar') : t('nav_collapse_topbar')}
           onClick={handleToggleSidebar}
           className="hidden lg:inline-flex"
         />
@@ -135,10 +140,10 @@ export function Topbar({
               <span key={`${crumb.href}-${index}`} className="inline-flex items-center gap-1">
                 {index > 0 && <ChevronRight size={12} className="text-[var(--lux-muted-soft)]" />}
                 {index === breadcrumbs.length - 1 ? (
-                  <span className="max-w-40 truncate text-[var(--lux-muted)] font-semibold">{crumb.label}</span>
+                  <span className="max-w-40 truncate text-[var(--lux-muted)] font-semibold">{t(crumb.labelKey)}</span>
                 ) : (
                   <Link href={crumb.href} className="max-w-32 truncate hover:text-[var(--lux-text)] transition-colors">
-                    {crumb.label}
+                    {t(crumb.labelKey)}
                   </Link>
                 )}
               </span>
@@ -154,7 +159,7 @@ export function Topbar({
           className="hidden h-9.5 w-56 items-center gap-2.5 rounded-xl border border-[var(--lux-line)]/80 bg-[var(--lux-surface-soft)]/60 px-3.5 text-xs text-[var(--lux-muted-soft)] transition-all hover:border-[var(--lux-primary)]/40 hover:bg-[var(--lux-elevated)] hover:text-[var(--lux-text)] md:flex shadow-xs"
         >
           <Search size={14} className="text-[var(--lux-muted-soft)]" />
-          <span className="flex-1 truncate text-left font-medium">Search workspace</span>
+          <span className="flex-1 truncate text-left font-medium">{t('topbar_search_placeholder')}</span>
           <kbd className="rounded-md border border-[var(--lux-line)] bg-[var(--lux-overlay)] px-1.5 py-0.5 font-mono text-[10px] font-bold">
             Ctrl K
           </kbd>
@@ -165,7 +170,7 @@ export function Topbar({
           className="hidden h-9.5 items-center gap-2 rounded-xl bg-[var(--lux-primary)] px-4 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.3)] transition-all hover:bg-[var(--lux-primary-hover)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98] sm:flex"
         >
           <Plus size={15} />
-          New scenario
+          {t('topbar_new_scenario')}
         </Link>
 
         <ThemeToggle compact />
@@ -182,7 +187,7 @@ export function Topbar({
               setAccountOpen(false)
             }}
             className="relative flex h-9.5 w-9.5 items-center justify-center rounded-xl text-[var(--lux-muted)] transition-colors hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text-strong)]"
-            aria-label="Notifications"
+            aria-label={t('topbar_notifications')}
           >
             <Bell size={17} />
             {notifications.length > 0 && (
@@ -196,7 +201,7 @@ export function Topbar({
           {notificationsOpen && (
             <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-[var(--lux-line)]/80 bg-[var(--lux-surface)]/95 p-3.5 shadow-2xl backdrop-blur-xl">
               <div className="mb-2.5 flex items-center justify-between border-b border-[var(--lux-line)]/60 pb-2.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-[var(--lux-text-strong)]">Notifications</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-[var(--lux-text-strong)]">{t('topbar_notifications')}</p>
                 {notifications.length > 0 && (
                   <span className="rounded-full bg-[var(--lux-primary-soft)] px-2.5 py-0.5 text-[10px] font-extrabold text-[var(--lux-primary-muted)]">
                     {notifications.length}
@@ -205,9 +210,9 @@ export function Topbar({
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto lux-scrollbar">
                 {notificationsLoading ? (
-                  <p className="px-3 py-6 text-center text-xs font-medium text-[var(--lux-muted-soft)]">Loading notifications...</p>
+                  <p className="px-3 py-6 text-center text-xs font-medium text-[var(--lux-muted-soft)]">{t('topbar_loading_notifications')}</p>
                 ) : notifications.length === 0 ? (
-                  <p className="px-3 py-6 text-center text-xs font-medium text-[var(--lux-muted-soft)]">No new notifications.</p>
+                  <p className="px-3 py-6 text-center text-xs font-medium text-[var(--lux-muted-soft)]">{t('topbar_no_notifications')}</p>
                 ) : (
                   notifications.map((notification) => (
                     <Link
@@ -237,7 +242,7 @@ export function Topbar({
               'flex h-9.5 items-center rounded-xl p-0.5 transition-all hover:bg-[var(--lux-overlay-hover)]',
               accountOpen && 'bg-[var(--lux-primary-soft)] ring-2 ring-[var(--lux-primary)]/40',
             )}
-            aria-label="Account menu"
+            aria-label={t('topbar_account_menu')}
           >
             <Avatar firstName={user?.firstName} lastName={user?.lastName} name={fullName} size="sm" />
           </button>
@@ -254,7 +259,7 @@ export function Topbar({
                 className="mt-2 flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-[var(--lux-muted)] hover:bg-[var(--lux-primary-soft)] hover:text-[var(--lux-text-strong)] transition-colors"
               >
                 <Settings size={15} />
-                Settings
+                {t('topbar_settings')}
               </Link>
               <button
                 type="button"
@@ -262,7 +267,7 @@ export function Topbar({
                 className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut size={15} />
-                Sign out
+                {t('nav_sign_out')}
               </button>
             </div>
           )}
@@ -278,21 +283,21 @@ export function Topbar({
                 value={query}
                 autoFocus
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search pages and actions..."
+                placeholder={t('topbar_search_dialog_placeholder')}
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--lux-text-strong)] outline-none placeholder:text-[var(--lux-muted-soft)]"
               />
               <button
                 type="button"
                 onClick={() => setSearchOpen(false)}
                 className="grid h-8 w-8 place-items-center rounded-xl text-[var(--lux-muted-soft)] hover:bg-[var(--lux-primary-soft)] hover:text-[var(--lux-text-strong)]"
-                aria-label="Close search"
+                aria-label={t('nav_close')}
               >
                 <X size={16} />
               </button>
             </div>
             <div className="max-h-96 overflow-y-auto p-2.5 lux-scrollbar">
               {filteredItems.length === 0 ? (
-                <p className="px-3 py-8 text-center text-xs font-medium text-[var(--lux-muted-soft)]">No matches found.</p>
+                <p className="px-3 py-8 text-center text-xs font-medium text-[var(--lux-muted-soft)]">{t('topbar_search_no_results')}</p>
               ) : (
                 filteredItems.map((item) => {
                   const Icon = item.icon
@@ -307,9 +312,9 @@ export function Topbar({
                         <Icon size={17} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-bold text-[var(--lux-text-strong)]">{item.label}</span>
-                        {item.description && (
-                          <span className="mt-0.5 block truncate text-xs font-medium text-[var(--lux-muted-soft)]">{item.description}</span>
+                        <span className="block truncate text-sm font-bold text-[var(--lux-text-strong)]">{t(item.labelKey)}</span>
+                        {item.descriptionKey && (
+                          <span className="mt-0.5 block truncate text-xs font-medium text-[var(--lux-muted-soft)]">{t(item.descriptionKey)}</span>
                         )}
                       </span>
                       {pathname === item.href && <CheckCircle2 size={16} className="text-[var(--lux-primary-muted)]" />}

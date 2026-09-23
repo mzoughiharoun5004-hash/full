@@ -84,4 +84,54 @@ describe('MediaService', () => {
       }),
     );
   });
+
+  it('classifies a document upload as DOCUMENT rather than keeping the "mass" placeholder the frontend creates every resource with', async () => {
+    // mediaApi.upload() in the frontend always creates the resource with
+    // `type: 'mass'` first, then relies on this step to correct it from the
+    // real file. A PDF/DOCX/etc. upload must not be left as MASS.
+    const legacy = ressourceStub({ type: TypeRessource.MASS });
+    repo.findOne.mockResolvedValueOnce(legacy);
+
+    const result = await service.attachFileToRessource(
+      1,
+      fileStub({
+        originalname: 'handout.pdf',
+        filename: 'handout.pdf',
+        mimetype: 'application/pdf',
+      }),
+      2,
+    );
+
+    expect(result.type).toBe(TypeRessource.DOCUMENT);
+  });
+
+  it('still classifies image/video/audio uploads correctly', async () => {
+    repo.findOne.mockResolvedValueOnce(
+      ressourceStub({ type: TypeRessource.MASS }),
+    );
+    const image = await service.attachFileToRessource(
+      1,
+      fileStub({
+        originalname: 'photo.png',
+        filename: 'photo.png',
+        mimetype: 'image/png',
+      }),
+      2,
+    );
+    expect(image.type).toBe(TypeRessource.MASS);
+
+    repo.findOne.mockResolvedValueOnce(
+      ressourceStub({ type: TypeRessource.MASS }),
+    );
+    const audio = await service.attachFileToRessource(
+      1,
+      fileStub({
+        originalname: 'clip.mp3',
+        filename: 'clip.mp3',
+        mimetype: 'audio/mpeg',
+      }),
+      2,
+    );
+    expect(audio.type).toBe(TypeRessource.AUDIO);
+  });
 });

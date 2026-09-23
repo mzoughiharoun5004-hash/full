@@ -22,7 +22,7 @@ export function useCourseDocumentAutosave({
   onSaved,
 }: UseCourseDocumentAutosaveOptions) {
   const [status, setStatus] = useState<SaveStatus>('saved')
-  const lastSavedRef = useRef(JSON.stringify(document))
+  const lastSavedRef = useRef(serializeForDirtyCheck(document))
   const latestDocumentRef = useRef(document)
   const queuedDocumentRef = useRef<CourseDocument | null>(null)
   const inFlightRef = useRef(false)
@@ -60,7 +60,7 @@ export function useCourseDocumentAutosave({
     // finishes loading.
     if (!baselineKey || !baselineDocument || baselineInitializedRef.current) return
 
-    lastSavedRef.current = JSON.stringify(baselineDocument)
+    lastSavedRef.current = serializeForDirtyCheck(baselineDocument)
     const baselineVersion = courseDocumentVersion(baselineDocument)
     versionRef.current = baselineVersion
     setSavedVersion(baselineVersion)
@@ -76,11 +76,20 @@ export function useCourseDocumentAutosave({
     if (inFlightRef.current) {
       queuedDocumentRef.current = latestDocumentRef.current
       const activeSave = activeSaveRef.current
-      if (!activeSave || !(await activeSave)) return false
+      try {
+        if (!activeSave || !(await activeSave)) return false
+      } catch {
+        // The save that was already in flight failed (network error, 409
+        // conflict, etc). Without this catch, that rejection propagated
+        // straight out of saveNow() as an unhandled promise rejection, so
+        // callers like the "Finish" button's onFinish() never got to run
+        // their `else` branch — clicking Finish just silently did nothing.
+        return false
+      }
       return saveNowRef.current()
     }
 
-    const submittedJson = JSON.stringify(submittedDocument)
+    const submittedJson = serializeForDirtyCheck(submittedDocument)
     if (submittedJson === lastSavedRef.current) {
       setStatus('saved')
       return true
@@ -99,8 +108,11 @@ export function useCourseDocumentAutosave({
       const request = scenariosApi
         .updateCourseDocument(scenarioId, submittedDocument, versionRef.current)
         .then((response) => {
-          lastSavedRef.current = submittedJson
           const nextVersion = courseDocumentVersion(response.data)
+          // Record the saved content without the version field so version
+          // bumps (which React state also reflects via onSaved's setDocument)
+          // never create a false mismatch and re-arm the debounce effect.
+          lastSavedRef.current = serializeForDirtyCheck(submittedDocument)
           versionRef.current = nextVersion
           setSavedVersion(nextVersion)
           onSavedRef.current?.(response.data)
@@ -108,9 +120,8 @@ export function useCourseDocumentAutosave({
         })
       activeSaveRef.current = request
       saved = await request
-      lastSavedRef.current = submittedJson
 
-      const latestJson = JSON.stringify(latestDocumentRef.current)
+      const latestJson = serializeForDirtyCheck(latestDocumentRef.current)
       if (latestJson === lastSavedRef.current && !queuedDocumentRef.current) {
         setStatus('saved')
       } else {
@@ -127,7 +138,7 @@ export function useCourseDocumentAutosave({
       activeSaveRef.current = null
     }
 
-    if (saved && JSON.stringify(latestDocumentRef.current) !== lastSavedRef.current) {
+    if (saved && serializeForDirtyCheck(latestDocumentRef.current) !== lastSavedRef.current) {
       return saveNowRef.current()
     }
     return saved
@@ -139,7 +150,7 @@ export function useCourseDocumentAutosave({
 
   const syncSavedDocument = useCallback((savedDoc: CourseDocument) => {
     const nextVersion = courseDocumentVersion(savedDoc)
-    lastSavedRef.current = JSON.stringify(savedDoc)
+    lastSavedRef.current = serializeForDirtyCheck(savedDoc)
     versionRef.current = nextVersion
     setSavedVersion(nextVersion)
     latestDocumentRef.current = savedDoc
@@ -165,7 +176,7 @@ export function useCourseDocumentAutosave({
 
   useEffect(() => {
     if (!scenarioId || !enabled || conflictReloadingRef.current) return
-    const nextJson = JSON.stringify(document)
+    const nextJson = serializeForDirtyCheck(document)
     if (nextJson === lastSavedRef.current) return
 
     queuedDocumentRef.current = document
@@ -215,4 +226,17 @@ function isConflictError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const response = (error as { response?: { status?: number } }).response
   return response?.status === 409
+}
+
+/**
+ * Serialize a document for dirty-checking, intentionally omitting
+ * `metadata.version`. The version is a backend-assigned optimistic-lock
+ * counter tracked in `versionRef`/`savedVersion`; it must never cause the
+ * debounce effect to fire a spurious save after `onSaved` bumps it in React
+ * state.
+ */
+function serializeForDirtyCheck(document: CourseDocument): string {
+  if (!document.metadata) return JSON.stringify(document)
+  const { version: _version, ...restMetadata } = document.metadata as Record<string, unknown>
+  return JSON.stringify({ ...document, metadata: restMetadata })
 }

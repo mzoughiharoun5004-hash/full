@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Plus, Search, Film, Edit2, Trash2, Copy, Archive, Send, CheckCircle, XCircle, Eye, Layers } from 'lucide-react'
 import Link from 'next/link'
@@ -19,6 +19,7 @@ import { RevokeScenarioDialog } from '@/components/scenarios/RevokeScenarioDialo
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue'
 import { formatDate, formatUserName, truncate } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from '@/context/LanguageContext'
 import {
   canUserEditScenario,
   isApprovedCollaboratorViewOnly,
@@ -28,23 +29,19 @@ import {
   userHasScenarioEditShare,
 } from '@/lib/scenarioActions'
 import type { Scenario, ScenarioStatus } from '@/types'
+import type { TranslationKey } from '@/lib/translations'
 
 type ScenarioFilter = ScenarioStatus | 'ALL' | 'MY'
 
-const statusFilters: { label: string; value: ScenarioFilter }[] = [
-  { label: 'All', value: 'ALL' },
-  { label: 'My', value: 'MY' },
-  { label: 'Draft', value: 'BROUILLON' },
-  { label: 'Review', value: 'EN_COURS_VALIDATION' },
-  { label: 'Approved', value: 'APPROUVE' },
-  { label: 'Archived', value: 'ARCHIVE' },
+const filterConfig: { labelKey: TranslationKey; value: ScenarioFilter }[] = [
+  { labelKey: 'scenarios_filter_all', value: 'ALL' },
+  { labelKey: 'scenarios_filter_my', value: 'MY' },
+  { labelKey: 'scenarios_filter_draft', value: 'BROUILLON' },
+  { labelKey: 'scenarios_filter_review', value: 'EN_COURS_VALIDATION' },
+  { labelKey: 'scenarios_filter_approved', value: 'APPROUVE' },
+  { labelKey: 'scenarios_filter_archived', value: 'ARCHIVE' },
 ]
 
-/**
- * Maps the segmented-control filter + search box onto the server-side list
- * params. "Approved" spans both APPROUVE and EXPORTE (see
- * isApprovedScenarioStatus) so it has to go through `statuses`, not `status`.
- */
 function buildScenarioListParams(
   filter: ScenarioFilter,
   search: string,
@@ -96,9 +93,13 @@ export default function ScenariosPage() {
   const itemsPerPage = 9
   const qc = useQueryClient()
   const { user, isAdmin } = useAuth()
+  const { t } = useTranslation()
 
-  // Debounced so typing doesn't fire a request per keystroke — the page
-  // number still resets immediately (below) for a responsive-feeling UI.
+  const statusFilters = useMemo(
+    () => filterConfig.map((item) => ({ label: t(item.labelKey), value: item.value })),
+    [t],
+  )
+
   const debouncedSearch = useDebouncedValue(search, 350)
 
   const { data, isLoading, isFetching } = useQuery({
@@ -109,45 +110,49 @@ export default function ScenariosPage() {
         (r) => r.data,
       )
     },
-    // Keeps showing the previous page's rows (instead of a full-page spinner)
-    // while the next page/filter/search request is in flight.
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   })
 
+  const scenarios = data?.items ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / itemsPerPage))
+
   const { mutate: deleteScenario } = useMutation({
     mutationFn: (id: string) => scenariosApi.delete(id),
     onSuccess: () => {
-      toast.success('Scenario deleted')
+      toast.success(t('scenarios_deleted'))
       setPage((currentPage) => Math.min(
         currentPage,
         Math.max(1, Math.ceil(Math.max(0, total - 1) / itemsPerPage)),
       ))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
-    onError: () => toast.error('Failed to delete scenario'),
+    onError: () => toast.error(t('scenarios_delete_error')),
   })
 
   const { mutate: duplicateScenario } = useMutation({
     mutationFn: (id: string) => scenariosApi.duplicate(id),
     onSuccess: () => {
-      toast.success('Scenario duplicated')
+      toast.success(t('scenarios_duplicated'))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
+    onError: () => toast.error(t('scenarios_duplicate_error')),
   })
 
   const { mutate: submitScenario } = useMutation({
     mutationFn: (id: string) => scenariosApi.submit(id),
     onSuccess: () => {
-      toast.success('Scenario submitted for review')
+      toast.success(t('scenarios_submitted'))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
+    onError: () => toast.error(t('scenarios_submit_error')),
   })
 
   const { mutate: approveScenario } = useMutation({
     mutationFn: (id: string) => scenariosApi.approve(id),
     onSuccess: () => {
-      toast.success('Scenario approved')
+      toast.success(t('scenarios_approved'))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
   })
@@ -156,23 +161,21 @@ export default function ScenariosPage() {
     mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
       scenariosApi.reject(id, { comment }),
     onSuccess: () => {
-      toast.success('Scenario returned to draft')
+      toast.success(t('scenarios_returned_draft'))
       setScenarioPendingRevoke(null)
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
+    onError: () => toast.error(t('scenarios_revoke_error')),
   })
 
   const { mutate: archiveScenario } = useMutation({
     mutationFn: (id: string) => scenariosApi.archive(id),
     onSuccess: () => {
-      toast.success('Scenario archived')
+      toast.success(t('scenarios_archived'))
       qc.invalidateQueries({ queryKey: ['scenarios'] })
     },
+    onError: () => toast.error(t('scenarios_archive_error')),
   })
-
-  const scenarios = data?.items ?? []
-  const total = data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / itemsPerPage))
 
   const confirmEditDowngrade = async () => {
     const pending = scenarioPendingEditDowngrade
@@ -180,10 +183,6 @@ export default function ScenariosPage() {
     setScenarioPendingEditDowngrade(null)
     const { scenario, href } = pending
 
-    // Matches by queryKey prefix (['scenarios', ...]) rather than a single
-    // exact key, since the key now also carries page/limit/filter/search —
-    // this way the optimistic edit lands on whichever page/filter is
-    // currently cached instead of silently no-op'ing.
     qc.setQueriesData<PaginatedScenarios>(
       { queryKey: ['scenarios'] },
       (oldData) => {
@@ -204,7 +203,7 @@ export default function ScenariosPage() {
       qc.invalidateQueries({ queryKey: ['scenarios'] })
       window.location.href = href
     } catch (error) {
-      toast.error('Failed to update scenario status')
+      toast.error(t('scenarios_status_update_error'))
       console.error(error)
     }
   }
@@ -213,16 +212,16 @@ export default function ScenariosPage() {
     <div className="space-y-6 fade-up">
       {/* Header */}
       <PageHeader
-        eyebrow="Authoring Suite"
-        title="Scenarios"
-        description={`${total} scenario${total !== 1 ? 's' : ''} in the current view`}
+        eyebrow={t('scenarios_eyebrow')}
+        title={t('scenarios_title')}
+        description={t('scenarios_count_in_view', { total })}
         actions={
           <Link
             href="/dashboard/scenarios/new"
             className="inline-flex h-9.5 items-center gap-2 rounded-xl bg-[var(--lux-primary)] px-4 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.3)] transition-all hover:bg-[var(--lux-primary-hover)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98]"
           >
             <Plus size={15} />
-            New scenario
+            {t('scenarios_new')}
           </Link>
         }
       />
@@ -231,7 +230,7 @@ export default function ScenariosPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="w-full sm:max-w-xs">
           <Input
-            placeholder="Search scenarios..."
+            placeholder={t('scenarios_search_placeholder')}
             icon={<Search size={14} />}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -245,7 +244,7 @@ export default function ScenariosPage() {
             setStatusFilter(value)
             setPage(1)
           }}
-          ariaLabel="Filter scenarios by status"
+          ariaLabel={t('scenarios_title')}
         />
       </div>
 
@@ -255,15 +254,15 @@ export default function ScenariosPage() {
       ) : scenarios.length === 0 ? (
         <EmptyState
           icon={<Film size={24} />}
-          title="No scenarios found"
-          description="Create your first scenario to get started"
+          title={search || statusFilter !== 'ALL' ? t('scenarios_empty_filtered') : t('scenarios_empty_title')}
+          description={t('scenarios_empty_desc')}
           action={
             <Link
               href="/dashboard/scenarios/new"
               className="inline-flex h-9 items-center gap-2 rounded-xl bg-[var(--lux-primary)] px-4 text-xs font-bold text-white hover:bg-[var(--lux-primary-hover)] transition-all"
             >
               <Plus size={14} />
-              New scenario
+              {t('scenarios_new')}
             </Link>
           }
         />
@@ -291,7 +290,7 @@ export default function ScenariosPage() {
                 }),
               )
               const hasEditShare = userHasScenarioEditShare(scenario.shares, user?.id)
-              const scenarioStatus = scenario.status ?? scenario.statut
+              const scenarioStatus = String(scenario.status ?? scenario.statut ?? '').toUpperCase() as ScenarioStatus
               const isApprovedOwner = isOwner && isApprovedScenarioStatus(scenarioStatus)
               const approvedCollaboratorViewOnly = isApprovedCollaboratorViewOnly({
                 isOwner,
@@ -304,10 +303,10 @@ export default function ScenariosPage() {
                 status: scenarioStatus,
               })
               const primaryActionLabel = canEditScenario
-                ? 'Edit'
+                ? t('scenarios_edit')
                 : approvedCollaboratorViewOnly || isCollaborator || !isAdmin
-                  ? 'View'
-                  : 'Review'
+                  ? t('scenarios_view')
+                  : t('scenarios_review')
               const primaryHref = scenarioPrimaryHref(scenario.id, {
                 canEdit: canEditScenario,
                 isApprovedOwner,
@@ -332,7 +331,7 @@ export default function ScenariosPage() {
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[var(--lux-primary)]/20 bg-[var(--lux-primary-soft)] text-[var(--lux-primary-muted)] group-hover:scale-105 transition-transform">
                       <Film size={18} />
                     </div>
-                    <StatusBadge status={scenario.status} />
+                    <StatusBadge status={scenarioStatus} />
                   </div>
 
                   <h3 className="font-bold text-sm text-[var(--lux-text-strong)] mb-1.5 leading-snug group-hover:text-[var(--lux-primary-muted)] transition-colors">
@@ -344,23 +343,23 @@ export default function ScenariosPage() {
                     </p>
                   )}
                   <p className="text-xs font-medium text-[var(--lux-muted)] mb-2">
-                    Author: <span className="text-[var(--lux-text-strong)]">{ownerName}</span>
+                    {t('scenarios_author', { name: ownerName })}
                   </p>
                   {isCollaborator && !isOwner && (
                     <span className="inline-block text-[11px] font-bold text-[var(--lux-primary-muted)] bg-[var(--lux-primary-soft)] px-2 py-0.5 rounded-md mb-2 w-max">
-                      {approvedCollaboratorViewOnly ? 'Shared with you (View Only)' : 'Collaborator'}
+                      {approvedCollaboratorViewOnly ? t('scenarios_shared_view_only') : t('scenarios_collaborator_badge')}
                     </span>
                   )}
                   {collaboratorSummary && (
                     <p className="text-xs text-[var(--lux-muted-soft)] mb-3">
-                      Shared with: {collaboratorSummary}
+                      {t('scenarios_shared_with', { names: collaboratorSummary })}
                     </p>
                   )}
                   <div className="flex items-center justify-between gap-2 mt-auto pt-3 border-t border-[var(--lux-line)]/50 text-xs text-[var(--lux-muted-soft)] font-medium">
                     <span>{formatDate(scenario.dateCreation ?? scenario.createdAt)}</span>
                     <span className="inline-flex items-center gap-1 text-[11px] bg-[var(--lux-surface-soft)] px-2 py-0.5 rounded-md border border-[var(--lux-line)]/70">
                       <Layers size={11} className="text-[var(--lux-primary-muted)]" />
-                      {moduleCount} module{moduleCount !== 1 ? 's' : ''}
+                      {moduleCount === 1 ? t('scenarios_modules', { n: moduleCount }) : t('scenarios_modules_plural', { n: moduleCount })}
                     </span>
                   </div>
                 </div>
@@ -385,35 +384,35 @@ export default function ScenariosPage() {
                       className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-[var(--lux-line)] px-2.5 text-xs font-semibold text-[var(--lux-muted)] transition-colors hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text-strong)]"
                     >
                       <Eye size={13} />
-                      View
+                      {t('scenarios_view')}
                     </Link>
                   )}
                   {canEditScenario && (
                     <button
                       type="button"
                       onClick={() => duplicateScenario(scenario.id)}
-                      title="Duplicate"
+                      title={t('scenarios_tooltip_duplicate')}
                       className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-[var(--lux-overlay-hover)] hover:text-[var(--lux-text-strong)]"
                     >
                       <Copy size={14} />
                     </button>
                   )}
-                  {canEditScenario && scenario.status === 'BROUILLON' && (
+                  {canEditScenario && scenarioStatus === 'BROUILLON' && (
                     <button
                       type="button"
                       onClick={() => submitScenario(scenario.id)}
-                      title="Submit for review"
+                      title={t('scenarios_tooltip_submit')}
                       className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-[var(--lux-primary-soft)] hover:text-[var(--lux-primary-muted)]"
                     >
                       <Send size={14} />
                     </button>
                   )}
-                  {isAdmin && !isCollaborator && scenario.status === 'EN_COURS_VALIDATION' && (
+                  {isAdmin && !isCollaborator && scenarioStatus === 'EN_COURS_VALIDATION' && (
                     <>
                       <button
                         type="button"
                         onClick={() => approveScenario(scenario.id)}
-                        title="Approve"
+                        title={t('scenarios_tooltip_approve')}
                         className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-[var(--lux-primary-soft)] hover:text-[var(--lux-primary-muted)]"
                       >
                         <CheckCircle size={14} />
@@ -421,18 +420,18 @@ export default function ScenariosPage() {
                       <button
                         type="button"
                         onClick={() => setScenarioPendingRevoke(scenario)}
-                        title="Reject"
+                        title={t('scenarios_tooltip_reject')}
                         className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-red-500/12 hover:text-red-400"
                       >
                         <XCircle size={14} />
                       </button>
                     </>
                   )}
-                  {canEditScenario && scenario.status !== 'ARCHIVE' && (
+                  {canEditScenario && scenarioStatus !== 'ARCHIVE' && (
                     <button
                       type="button"
                       onClick={() => archiveScenario(scenario.id)}
-                      title="Archive"
+                      title={t('scenarios_tooltip_archive')}
                       className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-[var(--lux-gold-soft)] hover:text-[var(--lux-gold)]"
                     >
                       <Archive size={14} />
@@ -442,7 +441,7 @@ export default function ScenariosPage() {
                     <button
                       type="button"
                       onClick={() => setScenarioPendingDelete(scenario)}
-                      title="Delete"
+                      title={t('scenarios_tooltip_delete')}
                       className="grid h-8.5 w-8.5 place-items-center rounded-lg text-[var(--lux-muted-soft)] transition-colors hover:bg-red-500/12 hover:text-red-400"
                     >
                       <Trash2 size={14} />
@@ -463,10 +462,10 @@ export default function ScenariosPage() {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1 || isFetching}
               >
-                Previous
+                {t('scenarios_prev')}
               </Button>
               <span className="text-xs font-bold text-[var(--lux-muted)]">
-                Page {page} of {totalPages}
+                {t('scenarios_page_of', { page, total: totalPages })}
               </span>
               <Button
                 variant="secondary"
@@ -474,7 +473,7 @@ export default function ScenariosPage() {
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages || isFetching}
               >
-                Next
+                {t('scenarios_next')}
               </Button>
             </div>
           )}
@@ -495,9 +494,9 @@ export default function ScenariosPage() {
 
       <ConfirmDialog
         open={scenarioPendingEditDowngrade !== null}
-        title="Move back to draft?"
-        description="Editing this approved scenario will move it back to draft status."
-        confirmLabel="Continue"
+        title={t('scenarios_move_draft_title')}
+        description={t('scenarios_move_draft_desc')}
+        confirmLabel={t('scenarios_move_draft_confirm')}
         variant="warning"
         onConfirm={() => void confirmEditDowngrade()}
         onCancel={() => setScenarioPendingEditDowngrade(null)}
@@ -507,11 +506,11 @@ export default function ScenariosPage() {
         open={scenarioPendingDelete !== null}
         title={
           scenarioPendingDelete
-            ? `Delete "${scenarioPendingDelete.title ?? scenarioPendingDelete.titre}"?`
+            ? `${t('scenarios_delete_confirm')} "${scenarioPendingDelete.title ?? scenarioPendingDelete.titre}"?`
             : ''
         }
-        description="This action cannot be undone."
-        confirmLabel="Delete"
+        description={t('scenarios_delete_desc')}
+        confirmLabel={t('scenarios_delete_confirm')}
         onConfirm={() => {
           if (scenarioPendingDelete) deleteScenario(scenarioPendingDelete.id)
           setScenarioPendingDelete(null)
