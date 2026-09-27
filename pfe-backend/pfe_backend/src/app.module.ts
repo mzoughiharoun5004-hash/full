@@ -44,7 +44,8 @@ import * as Joi from 'joi';
         CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
         AI_PROVIDER: Joi.string().valid('groq').default('groq'),
         AI_MODEL: Joi.string().default('openai/gpt-oss-20b'),
-        PEXELS_API_KEY: Joi.string().optional(),
+        // Docker Compose passes optional variables as empty strings when unset.
+        PEXELS_API_KEY: Joi.string().allow('').optional(),
         // Socket.IO Redis adapter — omit all of these to run single-process.
         REDIS_ENABLED: Joi.boolean().optional(),
         REDIS_URL: Joi.string().uri().optional(),
@@ -52,9 +53,10 @@ import * as Joi from 'joi';
         REDIS_PORT: Joi.number().port().default(6379),
         REDIS_PASSWORD: Joi.string().allow('').optional(),
         REDIS_DB: Joi.number().min(0).default(0),
-        // SCORM preview upload pruning.
+        // SCORM preview upload pruning and Chromium path.
         SCORM_UPLOAD_TTL_HOURS: Joi.number().min(1).default(24),
         SCORM_CLEANUP_INTERVAL_MINUTES: Joi.number().min(0).default(60),
+        PUPPETEER_EXECUTABLE_PATH: Joi.string().optional(),
       }),
     }),
     TypeOrmModule.forRootAsync({

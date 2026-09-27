@@ -68,8 +68,6 @@ export function useCourseSave({
     },
   })
 
-  const [savingProgress, setSavingProgress] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-
   const autosave = useCourseDocumentAutosave({
     scenarioId: persistedScenarioId,
     document,
@@ -94,13 +92,6 @@ export function useCourseSave({
           entityId: savedDocument.id,
         })
       }
-      setSavingProgress('saved')
-      toast.success('Auto-saved', {
-        duration: 2000,
-      })
-    },
-    onError: () => {
-      setSavingProgress('error')
     },
   })
 
@@ -133,13 +124,7 @@ export function useCourseSave({
       ? 'saving'
       : createScenarioMutation.isError && !persistedScenarioId
         ? 'error'
-        : autosave.status === 'saving'
-          ? 'saving'
-          : autosave.status === 'error'
-            ? 'error'
-            : savingProgress === 'saved'
-              ? 'saved'
-              : autosave.status
+        : autosave.status
   const saveLabel = readOnly
     ? viewOnlyMessage === 'approvedCollaborator'
       ? 'View only'

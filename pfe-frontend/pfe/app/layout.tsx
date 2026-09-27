@@ -16,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head></head>
+      <head>
+        <title>SupScenario — Course Authoring Platform</title>
+      </head>
       <body className="antialiased">
         <Providers>{children}</Providers>
       </body>

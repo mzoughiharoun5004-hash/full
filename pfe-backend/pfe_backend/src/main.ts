@@ -2,13 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
-import { DataSource } from 'typeorm';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RedisIoAdapter } from './scenario-collaboration/redis-io.adapter';
 
@@ -36,16 +36,6 @@ async function bootstrap() {
     mkdirSync(uploadDir, { recursive: true });
   }
 
-  // scenario.entity.ts marks the courseDocument index synchronize:false
-  // because it must be a GIN index (jsonb), and TypeORM's @Index() decorator
-  // has no option to request GIN over the default B-tree. Create/ensure the
-  // real index here instead; IF NOT EXISTS makes this a no-op after the
-  // first successful boot.
-  const dataSource = app.get(DataSource);
-  await dataSource.query(
-    'CREATE INDEX IF NOT EXISTS "IDX_scenario_courseDocument_gin" ON "scenario" USING GIN ("courseDocument")',
-  );
-
   // Global validation pipe — enforces all DTO class-validator decorators
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
@@ -62,17 +52,40 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  app.enableCors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`Origin ${origin} not allowed by CORS`));
-      }
-    },
-    methods: 'GET,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Accept, Authorization',
-    credentials: true,
+  // Browsers attach an Origin header to same-origin POST/PUT/PATCH/DELETE
+  // requests too, not only to cross-origin ones. Behind nginx the frontend and
+  // /api share one origin, and on a Cloudflare quick tunnel that origin is a
+  // *.trycloudflare.com hostname that changes on every restart, so it can never
+  // be listed in CORS_ORIGINS (and '*' there is compared literally, it is not a
+  // wildcard). An Origin whose host equals the request's own Host header is
+  // same-origin by definition, so let it through and keep the CORS_ORIGINS
+  // allow-list for genuinely cross-origin callers.
+  const isSameOrigin = (origin: string, host: string | undefined): boolean => {
+    if (!host) return false;
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
+  };
+
+  app.enableCors((req: Request, callback) => {
+    const origin = req.headers.origin;
+
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      isSameOrigin(origin, req.headers.host)
+    ) {
+      callback(null, {
+        origin: true,
+        methods: 'GET,PUT,PATCH,POST,DELETE',
+        allowedHeaders: 'Content-Type, Accept, Authorization',
+        credentials: true,
+      });
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`), {});
+    }
   });
 
   const config = new DocumentBuilder()

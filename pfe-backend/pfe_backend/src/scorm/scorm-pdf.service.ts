@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import puppeteer from 'puppeteer';
@@ -137,6 +137,7 @@ export class ScormPdfService
     this.browserLaunchPromise = puppeteer
       .launch({
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

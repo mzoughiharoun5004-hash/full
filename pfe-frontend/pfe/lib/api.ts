@@ -248,8 +248,17 @@ export const scenariosApi = {
     }).then((response) => checked(response, parsePaginatedScenarios)),
   getNotifications: () => api.get('/scenarios/notifications'),
   getOne: (id: string) => api.get(`/scenarios/${id}`).then((response) => checked(response, parseScenario)),
-  create: (data: { title?: string; titre?: string; description?: string; objectif?: string; niveau?: string; dureeScenario?: number; template?: string; isPublic?: boolean; courseDocument?: CourseDocument; scenarioDocument?: ScenarioDocument }) =>
-    api.post('/scenarios', data).then((response) => checked(response, parseScenario)),
+  create: (data: { title?: string; titre?: string; description?: string; objectif?: string; niveau?: string; dureeScenario?: number; template?: string; isPublic?: boolean; courseDocument?: CourseDocument; scenarioDocument?: ScenarioDocument }) => {
+    // CreateScenarioDto on the backend only declares `titre` (French) and the
+    // global ValidationPipe uses `whitelist: true`, which silently strips any
+    // field it doesn't recognize. Callers here (e.g. useCourseSave's
+    // createScenarioMutation) pass the English `title`, so it was being
+    // dropped in transit, leaving `titre` empty and failing its
+    // @IsNotEmpty() check ("titre should not be empty") even though the user
+    // had typed a title. Normalize to `titre` here so every caller is fixed.
+    const { title, titre, ...rest } = data
+    return api.post('/scenarios', { ...rest, titre: titre ?? title }).then((response) => checked(response, parseScenario))
+  },
   update: (id: string, data: object) =>
     api.put(`/scenarios/${id}`, data).then((response) => checked(response, parseScenario)),
   getCourseDocument: (id: string) =>

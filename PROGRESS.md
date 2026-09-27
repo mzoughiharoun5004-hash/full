@@ -79,6 +79,15 @@
 
 ---
 
+## Phase 9 — Session I: Cloudflare Tunnel Deployment Readiness
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 26 | Fix nginx `/api/` routing mismatch | ✅ DONE | `nginx/conf.d/default.conf` — `proxy_pass` had no trailing slash, so nginx forwarded `/api/*` to the backend with the prefix intact, but every controller is mounted bare (`@Controller('auth')`, not `@Controller('api/auth')`) — every API call would 404 once deployed. Added the trailing slash (`proxy_pass http://backend_api/;`) so nginx strips `/api/` before forwarding. The `/socket.io/` and `/uploads/` blocks already matched their targets and were left untouched |
+| 27 | Make `NEXT_PUBLIC_API_URL` survive the tunnel URL changing | ✅ DONE | `.env.production(.example)` — was blank, which fell back to the `http://localhost:3001` default baked into `lib/api.ts` at build time; unreachable for any real visitor once deployed via Cloudflare Tunnel. Set to the relative `/api` instead, so `lib/api.ts`'s axios `baseURL` resolves against whatever origin is currently serving the page — survives the trycloudflare.com URL changing on every restart, no rebuild needed. `context/SocketContext.tsx` derived its socket host from the same variable via `${SOCKET_URL}/scenario-collaboration`; with a bare `/api` value that would have connected to the wrong Socket.IO namespace (`/api/scenario-collaboration` instead of `/scenario-collaboration`), so it now strips a trailing `/api` back off before appending the namespace. Not run/tested here (no execution access to the user's machine) — worth confirming with a real deploy that both REST calls and realtime collaboration work through the tunnel |
+
+---
+
 ## Legend
 - ⬜ TODO
 - 🔄 IN PROGRESS

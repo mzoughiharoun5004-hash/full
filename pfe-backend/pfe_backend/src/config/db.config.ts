@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
 import { Role } from 'src/role/role.entity';
 import { User } from 'src/users/user.entity';
 import { Scenario } from 'src/scenario/scenario.entity';
@@ -17,6 +18,38 @@ import { ScenarioChangeProposal } from 'src/scenario-share/scenario-change-propo
 import { ScenarioComment } from 'src/scenario-share/scenario-comment.entity';
 import { AiChangeSet } from 'src/ai-course/ai-change-set.entity';
 
+export const entities = [
+  User,
+  Role,
+  Scenario,
+  CourseModule,
+  Sequence,
+  Ressource,
+  Activite,
+  Quiz,
+  Question,
+  Reponse,
+  Rapport,
+  ScenarioShare,
+  ScenarioComment,
+  ScenarioActivityLog,
+  ScenarioChangeProposal,
+  AiChangeSet,
+];
+
+export const databaseOptions = (
+  databaseUrl: string,
+  isProduction: boolean,
+): PostgresConnectionOptions => ({
+  type: 'postgres',
+  url: databaseUrl,
+  entities,
+  migrations: [__dirname + '/../migrations/*{.js,.ts}'],
+  migrationsRun: isProduction,
+  synchronize: !isProduction, // NEVER true in production — use migrations instead
+  logging: isProduction ? ['error', 'warn'] : ['query', 'error'],
+});
+
 export default (configService: ConfigService): TypeOrmModuleOptions => {
   const databaseUrl = configService.get<string>('database.url');
 
@@ -24,30 +57,5 @@ export default (configService: ConfigService): TypeOrmModuleOptions => {
     throw new Error('DATABASE_URL is not configured');
   }
 
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  return {
-    type: 'postgres',
-    url: databaseUrl,
-    entities: [
-      User,
-      Role,
-      Scenario,
-      CourseModule,
-      Sequence,
-      Ressource,
-      Activite,
-      Quiz,
-      Question,
-      Reponse,
-      Rapport,
-      ScenarioShare,
-      ScenarioComment,
-      ScenarioActivityLog,
-      ScenarioChangeProposal,
-      AiChangeSet,
-    ],
-    synchronize: !isProduction, // NEVER true in production — use migrations instead
-    logging: isProduction ? ['error', 'warn'] : ['query', 'error'],
-  };
+  return databaseOptions(databaseUrl, process.env.NODE_ENV === 'production');
 };

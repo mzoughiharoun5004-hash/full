@@ -13,7 +13,13 @@ import {
 import { io, type Socket } from 'socket.io-client'
 import { useAuth } from '@/context/AuthContext'
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+// Same origin as the REST API, minus any trailing `/api`: the collaboration
+// gateway is exposed on Socket.IO's default `/socket.io` path (nginx passes
+// it straight through, unprefixed), so a relative, tunnel-URL-independent
+// value like `/api` has to be stripped back to the bare origin before the
+// `/scenario-collaboration` namespace is appended below.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '')
 
 export interface CollaborationUser {
   id: number | string

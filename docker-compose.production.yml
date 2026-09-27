@@ -1,0 +1,164 @@
+# ==============================================================================
+# SupScenario Production Orchestration (Docker Compose + Cloudflare Tunnel)
+# Services: frontend, backend, postgres, redis, nginx, cloudflared
+# Zero-Trust Edge Deployment: Zero inbound ports exposed, edge SSL termination
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL 16 - Relational & JSONB Storage (GIN indexed)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: supscenario_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-supscenario_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - supscenario_net
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis 7 - Distributed Bus, Socket.IO Adapter & Session Cache
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: supscenario_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - supscenario_net
+
+  # ----------------------------------------------------------------------------
+  # 3. NestJS 11 Backend API & Puppeteer PDF Renderer
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./pfe-backend/pfe_backend
+      dockerfile: Dockerfile
+    container_name: supscenario_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Must be 0.0.0.0 inside Docker: the app defaults to 127.0.0.1, which nginx
+      # (a different container) cannot reach.
+      HOST: 0.0.0.0
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_NAME: ${POSTGRES_DB:-supscenario_db}
+      # The app only reads DATABASE_URL (see dist/config/config.js) - the DB_* vars
+      # above are not consumed by the code but are left for reference/tooling.
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-supscenario_db}
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      AI_PROVIDER: ${AI_PROVIDER:-groq}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-oss-20b}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      PEXELS_API_KEY: ${PEXELS_API_KEY}
+      SCORM_UPLOAD_TTL_HOURS: ${SCORM_UPLOAD_TTL_HOURS:-24}
+      SCORM_CLEANUP_INTERVAL_MINUTES: ${SCORM_CLEANUP_INTERVAL_MINUTES:-60}
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - supscenario_net
+
+  # ----------------------------------------------------------------------------
+  # 4. Next.js 16 Frontend (App Router, React 19, Standalone Mode)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./pfe-frontend/pfe
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    container_name: supscenario_frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    depends_on:
+      - backend
+    networks:
+      - supscenario_net
+
+  # ----------------------------------------------------------------------------
+  # 5. Nginx Reverse Proxy (Internal Hub for Cloudflare Tunnel)
+  # ----------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: supscenario_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - supscenario_net
+
+  # ----------------------------------------------------------------------------
+  # 6. Cloudflare Tunnel (cloudflared): Global Edge Tunnel
+  # ----------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: supscenario_cloudflared
+    restart: unless-stopped
+    command: ${CLOUDFLARE_TUNNEL_ARGS:-tunnel --url http://nginx:80}
+    depends_on:
+      - nginx
+    networks:
+      - supscenario_net
+
+# ==============================================================================
+# Persistent Volumes & Private Network
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: supscenario_postgres_data
+  redis_data:
+    name: supscenario_redis_data
+  backend_uploads:
+    name: supscenario_backend_uploads
+
+networks:
+  supscenario_net:
+    name: supscenario_net
+    driver: bridge

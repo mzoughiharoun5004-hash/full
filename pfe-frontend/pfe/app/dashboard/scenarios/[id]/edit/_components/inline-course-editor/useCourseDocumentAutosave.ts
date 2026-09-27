@@ -10,7 +10,6 @@ interface UseCourseDocumentAutosaveOptions {
   baselineKey?: string
   baselineDocument?: CourseDocument | null
   onSaved?: (document: CourseDocument) => void
-  onError?: (error: unknown) => void
 }
 
 export function useCourseDocumentAutosave({
@@ -28,6 +27,8 @@ export function useCourseDocumentAutosave({
   const inFlightRef = useRef(false)
   const activeSaveRef = useRef<Promise<boolean> | null>(null)
   const saveTimerRef = useRef<number | null>(null)
+  const retryTimerRef = useRef<number | null>(null)
+  const retryAttemptedRef = useRef(false)
   const saveNowRef = useRef<() => Promise<boolean>>(async () => false)
   const lastBaselineKeyRef = useRef<string | undefined>(undefined)
   const baselineInitializedRef = useRef(false)
@@ -115,6 +116,7 @@ export function useCourseDocumentAutosave({
           lastSavedRef.current = serializeForDirtyCheck(submittedDocument)
           versionRef.current = nextVersion
           setSavedVersion(nextVersion)
+          retryAttemptedRef.current = false
           onSavedRef.current?.(response.data)
           return true
         })
@@ -133,6 +135,13 @@ export function useCourseDocumentAutosave({
       const conflict = isConflictError(error)
       if (conflict) conflictReloadingRef.current = true
       setStatus(conflict ? 'conflict' : 'error')
+      if (!conflict && !retryAttemptedRef.current) {
+        retryAttemptedRef.current = true
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null
+          void saveNowRef.current()
+        }, 1_000)
+      }
     } finally {
       inFlightRef.current = false
       activeSaveRef.current = null
@@ -195,7 +204,22 @@ export function useCourseDocumentAutosave({
 
   useEffect(() => () => {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current)
+    if (queuedDocumentRef.current && !inFlightRef.current && !conflictReloadingRef.current) {
+      void saveNowRef.current()
+    }
   }, [])
+
+  useEffect(() => {
+    if (status !== 'dirty' && status !== 'saving') return
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [status])
 
   return {
     status,

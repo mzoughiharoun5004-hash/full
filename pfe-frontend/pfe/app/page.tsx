@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 const heroPhotoUrl =
   'https://images.pexels.com/photos/5212655/pexels-photo-5212655.jpeg?auto=compress&cs=tinysrgb&w=1800'
 
-function LanguageToggle() {
+function LanguageToggle({ compact }: { compact?: boolean } = {}) {
   const { locale, setLocale } = useLanguage()
   const options: { value: Locale; label: string }[] = [
     { value: 'en', label: 'EN' },
@@ -98,10 +98,10 @@ export default function HomePage() {
   ]
 
   return (
-    <main className="min-h-screen bg-[var(--lux-bg)] text-[var(--lux-text)]">
+    <main className="home-page min-h-screen bg-[var(--lux-bg)] text-[var(--lux-text)]">
       <section className="relative flex min-h-[660px] flex-col justify-between overflow-hidden pb-12 pt-4 lg:min-h-[720px] lg:pb-16">
         <div
-          className="absolute inset-0 bg-cover bg-[center_36%] lg:bg-center opacity-90 dark:opacity-75 transition-opacity duration-300 pointer-events-none"
+          className="absolute inset-0 bg-cover bg-[center_36%] lg:bg-center opacity-65 dark:opacity-75 transition-opacity duration-300 pointer-events-none"
           style={{ backgroundImage: `url(${heroPhotoUrl})` }}
           role="img"
           aria-label="An educator leading an online learning session"

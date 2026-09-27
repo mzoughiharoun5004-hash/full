@@ -119,6 +119,19 @@
   color-scheme: light;
 }
 
+/* The marketing page uses calmer neutral surfaces in light mode so the large
+   photographic hero and white cards do not create an overly bright screen. */
+:root[data-theme='light'] .home-page {
+  --lux-bg: #e8eef0;
+  --lux-bg-alt: #dde6e8;
+  --lux-surface: #f3f6f6;
+  --lux-surface-soft: #e5edef;
+  --lux-elevated: #d5e0e2;
+  --lux-line: #ccd9db;
+  --lux-line-strong: #b8c9cc;
+  --lux-shadow: 0 20px 50px rgba(15, 23, 42, 0.11);
+}
+
 :root:not([data-theme]) {
   --lux-bg: #090e13;
   --lux-bg-alt: #0d151c;
@@ -562,4 +575,3 @@ input:-webkit-autofill:active {
   caret-color: var(--lux-text-strong) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
-

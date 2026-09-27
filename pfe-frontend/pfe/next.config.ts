@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
+  // Framework-injected dev-only overlay (route type, bundler, etc.), not
+  // something authored in this codebase. Never shown in production builds.
+  devIndicators: false,
   turbopack: {
     root: process.cwd(),
   },
